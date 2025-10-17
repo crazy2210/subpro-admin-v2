@@ -1,6 +1,8 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import { getAuth } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 import { getFirestore, doc, onSnapshot, collection, query, addDoc, deleteDoc, serverTimestamp, orderBy, updateDoc, runTransaction, writeBatch, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { initAuth, hasPermission, PERMISSIONS, logout, applyUIRestrictions } from './auth.js';
+import { initUserManagement } from './users-management.js';
 
 const firebaseConfig = {
     apiKey: "AIzaSyAmO9EZt_56rqEdBqxkyJW8ROZDWQ-LDAU",
@@ -761,6 +763,10 @@ const openEditAccountModal=(e)=>{const t=allAccounts.find(t=>t.id===e);if(!t)ret
 
 // --- EXPORT FUNCTION ---
 const exportSalesToExcel = () => {
+    if (!hasPermission(PERMISSIONS.EXPORT_DATA)) {
+        showNotification('ليس لديك صلاحية لتصدير البيانات', 'danger');
+        return;
+    }
     let salesToExport = [...allSales];
 
     if (dateRangeStart && dateRangeEnd) {
@@ -926,6 +932,10 @@ const setupEventListeners = () => {
 const setupFormSubmissions = () => {
     document.getElementById('add-product-form').addEventListener('submit', async e => {
         e.preventDefault();
+        if (!hasPermission(PERMISSIONS.ADD_PRODUCT)) {
+            showNotification('ليس لديك صلاحية لإضافة منتجات', 'danger');
+            return;
+        }
         const form = e.target;
         const productName = form.productName.value.trim();
         if (productName) {
@@ -939,6 +949,10 @@ const setupFormSubmissions = () => {
 
     document.getElementById('add-account-form').addEventListener('submit', async e => {
         e.preventDefault();
+        if (!hasPermission(PERMISSIONS.ADD_ACCOUNT)) {
+            showNotification('ليس لديك صلاحية لإضافة أكونتات', 'danger');
+            return;
+        }
         const form = e.target;
         const submitBtn = form.querySelector('button[type="submit"]');
         submitBtn.disabled = true; submitBtn.textContent = 'جاري الإضافة...';
@@ -982,6 +996,10 @@ const setupFormSubmissions = () => {
 
     document.getElementById('add-sale-form').addEventListener('submit', async e => {
         e.preventDefault();
+        if (!hasPermission(PERMISSIONS.ADD_SALE)) {
+            showNotification('ليس لديك صلاحية لإضافة مبيعات', 'danger');
+            return;
+        }
         const form = e.target;
         const submitBtn = form.querySelector('button[type="submit"]');
         const isManualSale = document.getElementById('manual-sale-checkbox').checked;
@@ -1037,6 +1055,10 @@ const setupFormSubmissions = () => {
     
     document.getElementById('add-problem-form').addEventListener('submit', async e => {
         e.preventDefault();
+        if (!hasPermission(PERMISSIONS.ADD_PROBLEM)) {
+            showNotification('ليس لديك صلاحية لإضافة مشاكل', 'danger');
+            return;
+        }
         const form = e.target;
         const submitBtn = form.querySelector('button[type="submit"]');
         submitBtn.disabled = true; submitBtn.textContent = 'جاري الإضافة...';
@@ -1102,6 +1124,10 @@ const setupFormSubmissions = () => {
 
     document.getElementById('add-expense-form').addEventListener('submit', async e => {
          e.preventDefault();
+        if (!hasPermission(PERMISSIONS.ADD_EXPENSE)) {
+            showNotification('ليس لديك صلاحية لإضافة مصروفات', 'danger');
+            return;
+        }
         const submitBtn = e.target.querySelector('button[type="submit"]');
         submitBtn.disabled = true; submitBtn.textContent = 'جاري الإضافة...';
         const formData = new FormData(e.target);
@@ -1121,6 +1147,10 @@ const setupFormSubmissions = () => {
 
     document.getElementById('edit-sale-form').addEventListener('submit', async e => {
         e.preventDefault();
+        if (!hasPermission(PERMISSIONS.EDIT_SALE)) {
+            showNotification('ليس لديك صلاحية لتعديل المبيعات', 'danger');
+            return;
+        }
         const form = e.target;
         const submitBtn = form.querySelector('button[type="submit"]');
         submitBtn.disabled = true;
@@ -1204,6 +1234,10 @@ const setupFormSubmissions = () => {
 
      document.getElementById('edit-account-form').addEventListener('submit', async (e) => {
          e.preventDefault();
+        if (!hasPermission(PERMISSIONS.EDIT_ACCOUNT)) {
+            showNotification('ليس لديك صلاحية لتعديل الأكونتات', 'danger');
+            return;
+        }
         const submitBtn = e.target.querySelector('button[type="submit"]');
         submitBtn.disabled = true;
         const accountId = document.getElementById('edit-account-id').value;
@@ -1228,6 +1262,10 @@ const setupFormSubmissions = () => {
 
      document.getElementById('edit-expense-form').addEventListener('submit', async (e) => {
          e.preventDefault();
+        if (!hasPermission(PERMISSIONS.EDIT_EXPENSE)) {
+            showNotification('ليس لديك صلاحية لتعديل المصروفات', 'danger');
+            return;
+        }
         const submitBtn = e.target.querySelector('button[type="submit"]');
         submitBtn.disabled = true;
         const expenseId = document.getElementById('edit-expense-id').value;
@@ -1258,6 +1296,10 @@ const setupDynamicEventListeners = () => {
             if (textToCopy) copyToClipboard(textToCopy);
         } 
         else if (target.matches('.renewal-action-btn')) {
+            if (!hasPermission(PERMISSIONS.MANAGE_RENEWALS)) {
+                showNotification('ليس لديك صلاحية لإدارة التجديدات', 'danger');
+                return;
+            }
             const saleId = target.dataset.id;
             const action = target.dataset.action;
             try {
@@ -1272,6 +1314,10 @@ const setupDynamicEventListeners = () => {
             }
         }
         else if (target.matches('.confirm-sale-btn')) {
+            if (!hasPermission(PERMISSIONS.CONFIRM_SALE)) {
+                showNotification('ليس لديك صلاحية لتأكيد المبيعات', 'danger');
+                return;
+            }
             const saleId = target.dataset.id;
             if (confirm('هل أنت متأكد من تأكيد هذا الأوردر؟')) {
                 try {
@@ -1284,6 +1330,10 @@ const setupDynamicEventListeners = () => {
             openEditModal(target.closest('[data-sale-id]').dataset.saleId);
         } 
         else if (target.matches('.delete-sale-btn')) {
+            if (!hasPermission(PERMISSIONS.DELETE_SALE)) {
+                showNotification('ليس لديك صلاحية لحذف المبيعات', 'danger');
+                return;
+            }
             if (confirm('هل أنت متأكد من حذف هذا الاوردر؟ سيتم إرجاع الاستخدام للأكونت المرتبط.')) {
                 const saleId = target.closest('[data-sale-id]').dataset.saleId;
                 try {
@@ -1307,6 +1357,10 @@ const setupDynamicEventListeners = () => {
             }
         } 
         else if (target.matches('.delete-product-btn')) {
+            if (!hasPermission(PERMISSIONS.DELETE_PRODUCT)) {
+                showNotification('ليس لديك صلاحية لحذف المنتجات', 'danger');
+                return;
+            }
             const productId = target.dataset.id;
             if (confirm('هل أنت متأكد من حذف هذا المنتج؟')) {
                 try {
@@ -1320,6 +1374,10 @@ const setupDynamicEventListeners = () => {
             openEditAccountModal(accountId);
         } 
         else if (target.matches('.delete-account-btn')) {
+            if (!hasPermission(PERMISSIONS.DELETE_ACCOUNT)) {
+                showNotification('ليس لديك صلاحية لحذف الأكونتات', 'danger');
+                return;
+            }
             const accountId = target.dataset.id;
             if (allSales.some(sale => sale.accountId === accountId)) {
                 return alert("لا يمكن حذف هذا الأكونت لأنه مرتبط بأوردر واحد على الأقل.");
@@ -1336,6 +1394,10 @@ const setupDynamicEventListeners = () => {
             openEditExpenseModal(expenseId);
         } 
         else if(target.matches('.delete-expense-btn')) {
+            if (!hasPermission(PERMISSIONS.DELETE_EXPENSE)) {
+                showNotification('ليس لديك صلاحية لحذف المصروفات', 'danger');
+                return;
+            }
             if (confirm('هل أنت متأكد من حذف هذا المصروف؟')) {
                 try {
                      await deleteDoc(doc(db, PATH_EXPENSES, target.dataset.id));
@@ -1353,14 +1415,27 @@ async function initializeAppAndListeners() {
     setupFormSubmissions();
     setupDynamicEventListeners();
 
+    // Initialize authentication and check permissions
     try {
-        await signInAnonymously(auth);
-        console.log("Signed in anonymously to Firebase.");
+        await initAuth(auth, db);
+        console.log("User authenticated successfully");
+        
+        // Apply UI restrictions based on user role
+        applyUIRestrictions();
+        
+        // Initialize user management for admins
+        initUserManagement(db, showNotification);
+        
+        // Add logout button listener
+        document.body.addEventListener('click', (e) => {
+            if (e.target.closest('#logout-btn')) {
+                logout(auth);
+            }
+        });
+        
     } catch (error) {
-        console.error("Firebase anonymous sign-in failed:", error);
-        showNotification("فشل الاتصال بالخادم. برجاء تحديث الصفحة.", "danger");
-        document.getElementById('dashboard-loader').innerHTML = `<p class="text-red-500">فشل المصادقة مع الخادم. تأكد من تفعيل "تسجيل الدخول المجهول" في إعدادات Firebase.</p>`;
-        return;
+        console.error("Authentication failed:", error);
+        return; // Stop initialization if auth fails
     }
 
     // Fetch initial data to show the UI quickly, then set up real-time listeners
