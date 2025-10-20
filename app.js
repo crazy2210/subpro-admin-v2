@@ -1353,13 +1353,35 @@ async function initializeAppAndListeners() {
     setupFormSubmissions();
     setupDynamicEventListeners();
 
+    // Add timeout for authentication
+    const authTimeout = setTimeout(() => {
+        console.warn("Firebase authentication timeout - proceeding with fallback mode");
+        document.getElementById('dashboard-loader').innerHTML = `<p class="text-yellow-600">تحذير: لا يمكن الاتصال بقاعدة البيانات. يعمل التطبيق في وضع عدم الاتصال.</p>`;
+        document.getElementById('dashboard-loader').classList.add('hidden');
+        document.getElementById('dashboard-content').classList.remove('hidden');
+        showNotification("يعمل التطبيق في وضع عدم الاتصال", "info");
+    }, 10000); // 10 second timeout
+
     try {
         await signInAnonymously(auth);
+        clearTimeout(authTimeout);
         console.log("Signed in anonymously to Firebase.");
     } catch (error) {
+        clearTimeout(authTimeout);
         console.error("Firebase anonymous sign-in failed:", error);
-        showNotification("فشل الاتصال بالخادم. برجاء تحديث الصفحة.", "danger");
-        document.getElementById('dashboard-loader').innerHTML = `<p class="text-red-500">فشل المصادقة مع الخادم. تأكد من تفعيل "تسجيل الدخول المجهول" في إعدادات Firebase.</p>`;
+        console.log("Proceeding with fallback mode...");
+        
+        // Instead of stopping, continue with fallback mode
+        document.getElementById('dashboard-loader').innerHTML = `<p class="text-yellow-600">تحذير: لا يمكن الاتصال بقاعدة البيانات. يعمل التطبيق في وضع عدم الاتصال.</p>`;
+        setTimeout(() => {
+            document.getElementById('dashboard-loader').classList.add('hidden');
+            document.getElementById('dashboard-content').classList.remove('hidden');
+            showNotification("يعمل التطبيق في وضع عدم الاتصال", "info");
+        }, 2000);
+        
+        // Initialize with empty data for offline mode
+        renderProductList();
+        renderData();
         return;
     }
 
@@ -1388,14 +1410,37 @@ async function initializeAppAndListeners() {
 
     } catch (error) {
         console.error("Error fetching initial data:", error);
-        document.getElementById('dashboard-loader').innerHTML = `<p class="text-red-500">فشل الاتصال بقاعدة البيانات. الرجاء تحديث الصفحة.</p>`;
+        console.log("Proceeding with empty data for offline mode...");
+        
+        // Initialize with empty data for offline mode
+        allSales = [];
+        allExpenses = [];
+        allAccounts = [];
+        allProducts = [];
+        allProblems = [];
+        
+        populateProductDropdowns();
+        renderProductList();
+        renderData();
+        
+        document.getElementById('dashboard-loader').innerHTML = `<p class="text-yellow-600">تحذير: لا يمكن الاتصال بقاعدة البيانات. يعمل التطبيق في وضع عدم الاتصال.</p>`;
+        setTimeout(() => {
+            document.getElementById('dashboard-loader').classList.add('hidden');
+            document.getElementById('dashboard-content').classList.remove('hidden');
+            showNotification("يعمل التطبيق في وضع عدم الاتصال", "info");
+        }, 2000);
     }
 
-    onSnapshot(query(collection(db, PATH_SALES), orderBy("date", "desc")), snap => { allSales = snap.docs.map(d => ({ id: d.id, ...d.data() })); renderData(); });
-    onSnapshot(query(collection(db, PATH_EXPENSES), orderBy("date", "desc")), snap => { allExpenses = snap.docs.map(d => ({ id: d.id, ...d.data() })); renderData(); });
-    onSnapshot(query(collection(db, PATH_ACCOUNTS), orderBy("purchase_date", "desc")), snap => { allAccounts = snap.docs.map(d => ({ id: d.id, ...d.data() })); renderData(); });
-    onSnapshot(query(collection(db, PATH_PRODUCTS), orderBy("name")), snap => { allProducts = snap.docs.map(d => ({ id: d.id, ...d.data() })); populateProductDropdowns(); renderProductList(); renderData(); });
-    onSnapshot(query(collection(db, PATH_PROBLEMS), orderBy("date", "desc")), snap => { allProblems = snap.docs.map(d => ({ id: d.id, ...d.data() })); renderData(); });
+    // Only set up real-time listeners if Firebase is working
+    try {
+        onSnapshot(query(collection(db, PATH_SALES), orderBy("date", "desc")), snap => { allSales = snap.docs.map(d => ({ id: d.id, ...d.data() })); renderData(); });
+        onSnapshot(query(collection(db, PATH_EXPENSES), orderBy("date", "desc")), snap => { allExpenses = snap.docs.map(d => ({ id: d.id, ...d.data() })); renderData(); });
+        onSnapshot(query(collection(db, PATH_ACCOUNTS), orderBy("purchase_date", "desc")), snap => { allAccounts = snap.docs.map(d => ({ id: d.id, ...d.data() })); renderData(); });
+        onSnapshot(query(collection(db, PATH_PRODUCTS), orderBy("name")), snap => { allProducts = snap.docs.map(d => ({ id: d.id, ...d.data() })); populateProductDropdowns(); renderProductList(); renderData(); });
+        onSnapshot(query(collection(db, PATH_PROBLEMS), orderBy("date", "desc")), snap => { allProblems = snap.docs.map(d => ({ id: d.id, ...d.data() })); renderData(); });
+    } catch (error) {
+        console.warn("Real-time listeners not available - running in offline mode");
+    }
 }
 
 initializeAppAndListeners();

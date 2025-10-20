@@ -89,7 +89,13 @@
                      </button>
                 </div>
 
-                <div id="dashboard-loader" class="text-center text-gray-500 py-10"><p>جاري الاتصال بقاعدة البيانات...</p></div>
+                <div id="dashboard-loader" class="text-center text-gray-500 py-10">
+                    <div class="flex flex-col items-center">
+                        <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mb-4"></div>
+                        <p>جاري الاتصال بقاعدة البيانات...</p>
+                        <p class="text-sm text-gray-400 mt-2">قد يستغرق هذا بضع ثوانٍ</p>
+                    </div>
+                </div>
 
                 <div id="dashboard-content" class="grid grid-cols-12 gap-6 hidden">
                     <!-- Dashboard cards will be rendered here by JavaScript -->
