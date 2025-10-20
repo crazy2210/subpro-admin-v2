@@ -1,0 +1,141 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper function to check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Helper function to get user document
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+    
+    // Helper function to check if user is active
+    function isUserActive() {
+      return isAuthenticated() && getUserData().isActive == true;
+    }
+    
+    // Helper function to check if user has a role
+    function hasRole() {
+      return isAuthenticated() && getUserData().role != null;
+    }
+    
+    // Helper function to check if user has specific role
+    function hasRole(role) {
+      return isAuthenticated() && getUserData().role == role;
+    }
+    
+    // Helper function to check if user is admin
+    function isAdmin() {
+      return hasRole('admin');
+    }
+    
+    // Helper function to check if user is team leader
+    function isTeamLeader() {
+      return hasRole('team_leader');
+    }
+    
+    // Helper function to check if user is moderator
+    function isModerator() {
+      return hasRole('moderator');
+    }
+    
+    // Helper function to check if user can view data
+    function canViewData() {
+      return isUserActive() && hasRole();
+    }
+    
+    // Helper function to check if user can manage data
+    function canManageData() {
+      return isUserActive() && (isAdmin() || isTeamLeader());
+    }
+    
+    // Helper function to check if user can delete data
+    function canDeleteData() {
+      return isUserActive() && isAdmin();
+    }
+    
+    // Users collection - only admins can read/write
+    match /users/{userId} {
+      allow read, write: if isAdmin();
+    }
+    
+    // Sales collection
+    match /sales/{saleId} {
+      allow read: if canViewData();
+      allow create: if canViewData() && (
+        isAdmin() || 
+        isTeamLeader() || 
+        isModerator()
+      );
+      allow update: if canViewData() && (
+        isAdmin() || 
+        isTeamLeader()
+      );
+      allow delete: if canDeleteData();
+    }
+    
+    // Accounts collection
+    match /accounts/{accountId} {
+      allow read: if canViewData();
+      allow create: if canViewData() && (
+        isAdmin() || 
+        isTeamLeader()
+      );
+      allow update: if canViewData() && (
+        isAdmin() || 
+        isTeamLeader()
+      );
+      allow delete: if canDeleteData();
+    }
+    
+    // Expenses collection
+    match /expenses/{expenseId} {
+      allow read: if canViewData();
+      allow create: if canViewData() && (
+        isAdmin() || 
+        isTeamLeader()
+      );
+      allow update: if canViewData() && (
+        isAdmin() || 
+        isTeamLeader()
+      );
+      allow delete: if canDeleteData();
+    }
+    
+    // Products collection
+    match /products/{productId} {
+      allow read: if canViewData();
+      allow create: if canViewData() && (
+        isAdmin() || 
+        isTeamLeader()
+      );
+      allow update: if canViewData() && (
+        isAdmin() || 
+        isTeamLeader()
+      );
+      allow delete: if canDeleteData();
+    }
+    
+    // Problems collection
+    match /problems/{problemId} {
+      allow read: if canViewData();
+      allow create: if canViewData() && (
+        isAdmin() || 
+        isTeamLeader() || 
+        isModerator()
+      );
+      allow update: if canViewData() && (
+        isAdmin() || 
+        isTeamLeader()
+      );
+      allow delete: if canDeleteData();
+    }
+    
+    // Default deny all other collections
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

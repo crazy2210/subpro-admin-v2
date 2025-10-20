@@ -101,7 +101,7 @@ export async function initAuth(auth, db) {
     return new Promise((resolve, reject) => {
         onAuthStateChanged(auth, async (user) => {
             if (!user) {
-                // Not logged in, redirect to login page
+                // Not logged in, redirect to login page immediately
                 if (!window.location.pathname.includes('login.html')) {
                     window.location.href = 'login.html';
                 }
@@ -127,18 +127,27 @@ export async function initAuth(auth, db) {
                 currentUserData = userDoc.data();
 
                 // Check if user is active and has a role
-                if (!currentUserData.isActive || !currentUserData.role) {
+                if (!currentUserData.isActive) {
                     await signOut(auth);
-                    alert('حسابك غير مفعل أو لم يتم تعيين صلاحيات لك. يرجى التواصل مع المدير.');
+                    showAccountInactiveMessage();
                     window.location.href = 'login.html';
-                    reject(new Error('User not active or no role assigned'));
+                    reject(new Error('User not active'));
+                    return;
+                }
+
+                if (!currentUserData.role) {
+                    await signOut(auth);
+                    showNoRoleMessage();
+                    window.location.href = 'login.html';
+                    reject(new Error('No role assigned'));
                     return;
                 }
 
                 console.log('User authenticated:', {
                     name: currentUserData.name,
                     role: currentUserData.role,
-                    email: currentUserData.email
+                    email: currentUserData.email,
+                    isActive: currentUserData.isActive
                 });
 
                 resolve(currentUserData);
@@ -150,6 +159,26 @@ export async function initAuth(auth, db) {
             }
         });
     });
+}
+
+// Show account inactive message
+function showAccountInactiveMessage() {
+    const message = 'حسابك غير مفعل. يرجى التواصل مع المدير لتفعيل حسابك.';
+    if (typeof showNotification === 'function') {
+        showNotification(message, 'danger');
+    } else {
+        alert(message);
+    }
+}
+
+// Show no role assigned message
+function showNoRoleMessage() {
+    const message = 'لم يتم تعيين صلاحيات لك بعد. يرجى التواصل مع المدير.';
+    if (typeof showNotification === 'function') {
+        showNotification(message, 'danger');
+    } else {
+        alert(message);
+    }
 }
 
 // Check if user has a specific permission
@@ -207,6 +236,11 @@ export function applyUIRestrictions() {
         if (problemsTab) problemsTab.style.display = 'none';
     }
 
+    if (!hasPermission(PERMISSIONS.VIEW_ACCOUNTS)) {
+        const accountsTab = document.querySelector('[data-tab="accounts"]');
+        if (accountsTab) accountsTab.style.display = 'none';
+    }
+
     // Hide export button if no permission
     if (!hasPermission(PERMISSIONS.EXPORT_DATA)) {
         const exportBtn = document.getElementById('export-sales-btn');
@@ -260,6 +294,21 @@ export function applyUIRestrictions() {
         if (addProductForm) addProductForm.style.display = 'none';
     }
 
+    if (!hasPermission(PERMISSIONS.ADD_SALE)) {
+        const addSaleBtn = document.getElementById('toggle-add-sale-form');
+        if (addSaleBtn) addSaleBtn.style.display = 'none';
+    }
+
+    // Hide confirm buttons if no permission
+    if (!hasPermission(PERMISSIONS.CONFIRM_SALE)) {
+        document.body.classList.add('hide-confirm-sale-buttons');
+    }
+
+    // Hide renewal management if no permission
+    if (!hasPermission(PERMISSIONS.MANAGE_RENEWALS)) {
+        document.body.classList.add('hide-renewal-management');
+    }
+
     // Add user info to header
     addUserInfoToHeader();
 }
@@ -300,6 +349,48 @@ function addUserInfoToHeader() {
     `;
 
     header.appendChild(userInfoDiv);
+}
+
+// Check if user has access to a specific section
+export function checkSectionAccess(sectionName) {
+    if (!currentUserData) return false;
+
+    const sectionPermissions = {
+        'dashboard': [PERMISSIONS.VIEW_DASHBOARD],
+        'reports': [PERMISSIONS.VIEW_REPORTS],
+        'sales': [PERMISSIONS.VIEW_SALES],
+        'renewals': [PERMISSIONS.MANAGE_RENEWALS],
+        'problems': [PERMISSIONS.VIEW_PROBLEMS],
+        'accounts': [PERMISSIONS.VIEW_ACCOUNTS],
+        'expenses': [PERMISSIONS.VIEW_EXPENSES]
+    };
+
+    const requiredPermissions = sectionPermissions[sectionName];
+    if (!requiredPermissions) return true; // Allow access to unknown sections
+
+    return requiredPermissions.some(permission => hasPermission(permission));
+}
+
+// Show unauthorized access message
+export function showUnauthorizedAccessMessage(sectionName) {
+    const sectionNames = {
+        'dashboard': 'لوحة التحكم',
+        'reports': 'التقارير',
+        'sales': 'سجل المبيعات',
+        'renewals': 'التنبيهات',
+        'problems': 'المشاكل',
+        'accounts': 'إدارة الأكونتات',
+        'expenses': 'المصروفات'
+    };
+
+    const sectionDisplayName = sectionNames[sectionName] || sectionName;
+    const message = `ليس لديك صلاحية للوصول إلى ${sectionDisplayName}. يرجى التواصل مع المدير.`;
+    
+    if (typeof showNotification === 'function') {
+        showNotification(message, 'danger');
+    } else {
+        alert(message);
+    }
 }
 
 // Logout function

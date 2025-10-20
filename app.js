@@ -1,7 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getAuth } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-import { getFirestore, doc, onSnapshot, collection, query, addDoc, deleteDoc, serverTimestamp, orderBy, updateDoc, runTransaction, writeBatch, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-import { initAuth, hasPermission, PERMISSIONS, logout, applyUIRestrictions } from './auth.js';
+import { getAuth, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import { getFirestore, doc, onSnapshot, collection, query, addDoc, deleteDoc, serverTimestamp, orderBy, updateDoc, runTransaction, writeBatch, getDocs, getDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { initAuth, hasPermission, PERMISSIONS, logout, applyUIRestrictions, checkSectionAccess, showUnauthorizedAccessMessage } from './auth.js';
 import { initUserManagement } from './users-management.js';
 
 const firebaseConfig = {
@@ -836,6 +836,14 @@ const setupEventListeners = () => {
     const tabContents = document.querySelectorAll('.tab-content');
     tabs.forEach(tab => {
         tab.addEventListener('click', () => {
+            const sectionName = tab.dataset.tab;
+            
+            // Check if user has access to this section
+            if (!checkSectionAccess(sectionName)) {
+                showUnauthorizedAccessMessage(sectionName);
+                return;
+            }
+            
             tabs.forEach(t => t.classList.remove('active'));
             tab.classList.add('active');
             const target = document.getElementById(tab.dataset.tab + '-section');
@@ -1408,8 +1416,98 @@ const setupDynamicEventListeners = () => {
     });
 };
 
+// Show unauthorized access screen for a section
+function showUnauthorizedAccessScreen(sectionName) {
+    const sectionNames = {
+        'dashboard': 'لوحة التحكم',
+        'reports': 'التقارير',
+        'sales': 'سجل المبيعات',
+        'renewals': 'التنبيهات',
+        'problems': 'المشاكل',
+        'accounts': 'إدارة الأكونتات',
+        'expenses': 'المصروفات'
+    };
+
+    const sectionDisplayName = sectionNames[sectionName] || sectionName;
+    
+    return `
+        <div class="unauthorized-access">
+            <i class="fas fa-ban"></i>
+            <h2>غير مصرح لك بالوصول</h2>
+            <p>ليس لديك صلاحية للوصول إلى ${sectionDisplayName}. يرجى التواصل مع المدير للحصول على الصلاحيات المناسبة.</p>
+            <a href="#" class="btn" onclick="history.back()">
+                <i class="fas fa-arrow-right ml-2"></i>العودة
+            </a>
+        </div>
+    `;
+}
+
+// Check and display unauthorized access screens for restricted sections
+function checkAndDisplayUnauthorizedScreens() {
+    const sections = ['dashboard', 'reports', 'sales', 'renewals', 'problems', 'accounts', 'expenses'];
+    
+    sections.forEach(sectionName => {
+        const sectionElement = document.getElementById(sectionName + '-section');
+        if (sectionElement && !checkSectionAccess(sectionName)) {
+            sectionElement.innerHTML = showUnauthorizedAccessScreen(sectionName);
+        }
+    });
+}
+
+// Check authentication immediately on page load
+async function checkAuthenticationOnLoad() {
+    try {
+        // Check if user is already authenticated
+        const user = auth.currentUser;
+        if (!user) {
+            window.location.href = 'login.html';
+            return false;
+        }
+
+        // Get user data from Firestore
+        const userDocRef = doc(db, 'users', user.uid);
+        const userDoc = await getDoc(userDocRef);
+
+        if (!userDoc.exists()) {
+            await signOut(auth);
+            window.location.href = 'login.html';
+            return false;
+        }
+
+        const userData = userDoc.data();
+        
+        // Check if user is active
+        if (!userData.isActive) {
+            await signOut(auth);
+            showNotification('حسابك غير مفعل. يرجى التواصل مع المدير.', 'danger');
+            window.location.href = 'login.html';
+            return false;
+        }
+
+        // Check if user has a role
+        if (!userData.role) {
+            await signOut(auth);
+            showNotification('لم يتم تعيين صلاحيات لك بعد. يرجى التواصل مع المدير.', 'danger');
+            window.location.href = 'login.html';
+            return false;
+        }
+
+        return true;
+    } catch (error) {
+        console.error("Authentication check failed:", error);
+        window.location.href = 'login.html';
+        return false;
+    }
+}
+
 // --- APP INITIALIZATION ---
 async function initializeAppAndListeners() {
+    // Check authentication immediately
+    const isAuthenticated = await checkAuthenticationOnLoad();
+    if (!isAuthenticated) {
+        return;
+    }
+
     setupChartDefaults();
     setupEventListeners();
     setupFormSubmissions();
@@ -1422,6 +1520,9 @@ async function initializeAppAndListeners() {
         
         // Apply UI restrictions based on user role
         applyUIRestrictions();
+        
+        // Check and display unauthorized access screens
+        checkAndDisplayUnauthorizedScreens();
         
         // Initialize user management for admins
         initUserManagement(db, showNotification);
