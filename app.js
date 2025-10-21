@@ -1455,12 +1455,19 @@ function checkAndDisplayUnauthorizedScreens() {
 }
 
 // Check authentication immediately on page load
+let isRedirecting = false;
 async function checkAuthenticationOnLoad() {
     try {
+        // Wait a bit for authentication state to stabilize
+        await new Promise(resolve => setTimeout(resolve, 200));
+        
         // Check if user is already authenticated
         const user = auth.currentUser;
         if (!user) {
-            window.location.href = 'login.html';
+            if (!isRedirecting && !window.location.href.includes('login.html')) {
+                isRedirecting = true;
+                window.location.href = 'login.html';
+            }
             return false;
         }
 
@@ -1470,7 +1477,10 @@ async function checkAuthenticationOnLoad() {
 
         if (!userDoc.exists()) {
             await signOut(auth);
-            window.location.href = 'login.html';
+            if (!isRedirecting && !window.location.href.includes('login.html')) {
+                isRedirecting = true;
+                window.location.href = 'login.html';
+            }
             return false;
         }
 
@@ -1480,7 +1490,10 @@ async function checkAuthenticationOnLoad() {
         if (!userData.isActive) {
             await signOut(auth);
             showNotification('حسابك غير مفعل. يرجى التواصل مع المدير.', 'danger');
-            window.location.href = 'login.html';
+            if (!isRedirecting && !window.location.href.includes('login.html')) {
+                isRedirecting = true;
+                window.location.href = 'login.html';
+            }
             return false;
         }
 
@@ -1488,14 +1501,20 @@ async function checkAuthenticationOnLoad() {
         if (!userData.role) {
             await signOut(auth);
             showNotification('لم يتم تعيين صلاحيات لك بعد. يرجى التواصل مع المدير.', 'danger');
-            window.location.href = 'login.html';
+            if (!isRedirecting && !window.location.href.includes('login.html')) {
+                isRedirecting = true;
+                window.location.href = 'login.html';
+            }
             return false;
         }
 
         return true;
     } catch (error) {
         console.error("Authentication check failed:", error);
-        window.location.href = 'login.html';
+        if (!isRedirecting && !window.location.href.includes('login.html')) {
+            isRedirecting = true;
+            window.location.href = 'login.html';
+        }
         return false;
     }
 }
@@ -1515,6 +1534,9 @@ async function initializeAppAndListeners() {
 
     // Initialize authentication and check permissions
     try {
+        // Wait a bit more to ensure auth state is fully established
+        await new Promise(resolve => setTimeout(resolve, 300));
+        
         await initAuth(auth, db);
         console.log("User authenticated successfully");
         
