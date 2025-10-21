@@ -102,7 +102,7 @@ export async function initAuth(auth, db) {
         onAuthStateChanged(auth, async (user) => {
             if (!user) {
                 // Not logged in, redirect to login page immediately
-                if (!window.location.pathname.includes('login.html')) {
+                if (!window.location.pathname.includes('login.html') && !window.location.href.includes('login.html')) {
                     window.location.href = 'login.html';
                 }
                 reject(new Error('Not authenticated'));
@@ -112,6 +112,9 @@ export async function initAuth(auth, db) {
             currentUser = user;
 
             try {
+                // Add a small delay to ensure authentication state is stable
+                await new Promise(resolve => setTimeout(resolve, 100));
+                
                 // Get user data from Firestore
                 const userDocRef = doc(db, 'users', user.uid);
                 const userDoc = await getDoc(userDocRef);
@@ -119,7 +122,9 @@ export async function initAuth(auth, db) {
                 if (!userDoc.exists()) {
                     // User document doesn't exist, redirect to login
                     await signOut(auth);
-                    window.location.href = 'login.html';
+                    if (!window.location.href.includes('login.html')) {
+                        window.location.href = 'login.html';
+                    }
                     reject(new Error('User data not found'));
                     return;
                 }
@@ -130,7 +135,9 @@ export async function initAuth(auth, db) {
                 if (!currentUserData.isActive) {
                     await signOut(auth);
                     showAccountInactiveMessage();
-                    window.location.href = 'login.html';
+                    if (!window.location.href.includes('login.html')) {
+                        window.location.href = 'login.html';
+                    }
                     reject(new Error('User not active'));
                     return;
                 }
@@ -138,7 +145,9 @@ export async function initAuth(auth, db) {
                 if (!currentUserData.role) {
                     await signOut(auth);
                     showNoRoleMessage();
-                    window.location.href = 'login.html';
+                    if (!window.location.href.includes('login.html')) {
+                        window.location.href = 'login.html';
+                    }
                     reject(new Error('No role assigned'));
                     return;
                 }
@@ -154,7 +163,9 @@ export async function initAuth(auth, db) {
             } catch (error) {
                 console.error('Error fetching user data:', error);
                 await signOut(auth);
-                window.location.href = 'login.html';
+                if (!window.location.href.includes('login.html')) {
+                    window.location.href = 'login.html';
+                }
                 reject(error);
             }
         });

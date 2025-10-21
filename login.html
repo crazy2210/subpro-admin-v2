@@ -239,7 +239,10 @@
                 }
 
                 showNotification('تم تسجيل الدخول بنجاح!', 'success');
-                setTimeout(() => window.location.href = 'index.html', 1000);
+                // Prevent multiple redirects
+                if (!window.location.href.includes('index.html')) {
+                    setTimeout(() => window.location.href = 'index.html', 1000);
+                }
             } catch (error) {
                 console.error('Login error:', error);
                 let errorMessage = 'حدث خطأ في تسجيل الدخول';
@@ -311,12 +314,24 @@
         });
 
         // Check if user is already logged in
+        let isRedirecting = false;
         auth.onAuthStateChanged(async (user) => {
-            if (user) {
-                // Check if user has active role
-                const userDoc = await getDoc(doc(db, 'users', user.uid));
-                if (userDoc.exists() && userDoc.data().isActive) {
-                    window.location.href = 'index.html';
+            if (user && !isRedirecting) {
+                try {
+                    // Check if user has active role
+                    const userDoc = await getDoc(doc(db, 'users', user.uid));
+                    if (userDoc.exists() && userDoc.data().isActive) {
+                        isRedirecting = true;
+                        // Add a small delay to ensure the authentication state is fully established
+                        setTimeout(() => {
+                            // Only redirect if we're not already on the index page
+                            if (!window.location.href.includes('index.html')) {
+                                window.location.href = 'index.html';
+                            }
+                        }, 100);
+                    }
+                } catch (error) {
+                    console.error('Error checking user status:', error);
                 }
             }
         });
