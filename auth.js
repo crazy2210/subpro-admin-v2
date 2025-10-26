@@ -1,15 +1,14 @@
-// auth.js - Authentication and Permission Management Module
-import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+// auth.js - Link-based Access Management (no Firebase Auth)
 
-// Role definitions
+// Link roles
 export const ROLES = {
-    ADMIN: 'admin',
+    OWNER: 'owner',
     TEAM_LEADER: 'team_leader',
-    MODERATOR: 'moderator'
+    MODERATOR: 'moderator',
+    VIEWER: 'viewer'
 };
 
-// Permission definitions
+// Permission definitions (unchanged)
 export const PERMISSIONS = {
     // View permissions
     VIEW_DASHBOARD: 'view_dashboard',
@@ -45,14 +44,12 @@ export const PERMISSIONS = {
     MANAGE_RENEWALS: 'manage_renewals'
 };
 
-// Role-based permissions mapping
+// Role-based permissions mapping for link roles
 const ROLE_PERMISSIONS = {
-    [ROLES.ADMIN]: [
-        // Admin has all permissions
+    [ROLES.OWNER]: [
         ...Object.values(PERMISSIONS)
     ],
     [ROLES.TEAM_LEADER]: [
-        // View permissions
         PERMISSIONS.VIEW_DASHBOARD,
         PERMISSIONS.VIEW_REPORTS,
         PERMISSIONS.VIEW_SALES,
@@ -60,182 +57,98 @@ const ROLE_PERMISSIONS = {
         PERMISSIONS.VIEW_PROBLEMS,
         PERMISSIONS.VIEW_ACCOUNTS,
         PERMISSIONS.VIEW_EXPENSES,
-        
-        // Action permissions
         PERMISSIONS.ADD_SALE,
         PERMISSIONS.EDIT_SALE,
         PERMISSIONS.CONFIRM_SALE,
         PERMISSIONS.EXPORT_DATA,
-        
         PERMISSIONS.ADD_ACCOUNT,
         PERMISSIONS.EDIT_ACCOUNT,
-        
         PERMISSIONS.ADD_EXPENSE,
         PERMISSIONS.EDIT_EXPENSE,
-        
         PERMISSIONS.ADD_PRODUCT,
-        
         PERMISSIONS.ADD_PROBLEM,
         PERMISSIONS.MANAGE_RENEWALS
     ],
     [ROLES.MODERATOR]: [
-        // View permissions
         PERMISSIONS.VIEW_DASHBOARD,
         PERMISSIONS.VIEW_SALES,
         PERMISSIONS.VIEW_RENEWALS,
         PERMISSIONS.VIEW_ACCOUNTS,
-        
-        // Action permissions
         PERMISSIONS.ADD_SALE,
         PERMISSIONS.CONFIRM_SALE,
         PERMISSIONS.MANAGE_RENEWALS
+    ],
+    [ROLES.VIEWER]: [
+        PERMISSIONS.VIEW_DASHBOARD,
+        PERMISSIONS.VIEW_REPORTS,
+        PERMISSIONS.VIEW_SALES,
+        PERMISSIONS.VIEW_RENEWALS,
+        PERMISSIONS.VIEW_PROBLEMS,
+        PERMISSIONS.VIEW_ACCOUNTS,
+        PERMISSIONS.VIEW_EXPENSES
     ]
 };
 
-// Current user state
-let currentUser = null;
-let currentUserData = null;
+let currentAccessRole = null;
 
-// Initialize authentication
-export async function initAuth(auth, db) {
-    return new Promise((resolve, reject) => {
-        onAuthStateChanged(auth, async (user) => {
-            if (!user) {
-                // Not logged in, redirect to login page immediately
-                if (!window.location.pathname.includes('login.html')) {
-                    window.location.href = 'login.html';
-                }
-                reject(new Error('Not authenticated'));
-                return;
-            }
-
-            currentUser = user;
-
-            try {
-                // Get user data from Firestore
-                const userDocRef = doc(db, 'users', user.uid);
-                const userDoc = await getDoc(userDocRef);
-
-                if (!userDoc.exists()) {
-                    // User document doesn't exist, redirect to login
-                    await signOut(auth);
-                    window.location.href = 'login.html';
-                    reject(new Error('User data not found'));
-                    return;
-                }
-
-                currentUserData = userDoc.data();
-
-                // Check if user is active and has a role
-                if (!currentUserData.isActive) {
-                    await signOut(auth);
-                    showAccountInactiveMessage();
-                    window.location.href = 'login.html';
-                    reject(new Error('User not active'));
-                    return;
-                }
-
-                if (!currentUserData.role) {
-                    await signOut(auth);
-                    showNoRoleMessage();
-                    window.location.href = 'login.html';
-                    reject(new Error('No role assigned'));
-                    return;
-                }
-
-                console.log('User authenticated:', {
-                    name: currentUserData.name,
-                    role: currentUserData.role,
-                    email: currentUserData.email,
-                    isActive: currentUserData.isActive
-                });
-
-                resolve(currentUserData);
-            } catch (error) {
-                console.error('Error fetching user data:', error);
-                await signOut(auth);
-                window.location.href = 'login.html';
-                reject(error);
-            }
-        });
-    });
+function parseAccessRoleFromUrl() {
+    const params = new URLSearchParams(window.location.search);
+    const access = (params.get('access') || '').toLowerCase().trim();
+    if (!access) return ROLES.VIEWER; // default open as viewer
+    if (['owner', 'admin', 'boss'].includes(access)) return ROLES.OWNER;
+    if (['team_leader', 'team', 'lead', 'tl'].includes(access)) return ROLES.TEAM_LEADER;
+    if (['moderator', 'mod'].includes(access)) return ROLES.MODERATOR;
+    if (['viewer', 'view', 'read'].includes(access)) return ROLES.VIEWER;
+    return ROLES.VIEWER;
 }
 
-// Show account inactive message
-function showAccountInactiveMessage() {
-    const message = 'حسابك غير مفعل. يرجى التواصل مع المدير لتفعيل حسابك.';
-    if (typeof showNotification === 'function') {
-        showNotification(message, 'danger');
-    } else {
-        alert(message);
-    }
+// Initialize link-based access (no redirects)
+export async function initAccess() {
+    currentAccessRole = parseAccessRoleFromUrl();
+    // Update header badge
+    addAccessInfoToHeader();
+    return currentAccessRole;
 }
 
-// Show no role assigned message
-function showNoRoleMessage() {
-    const message = 'لم يتم تعيين صلاحيات لك بعد. يرجى التواصل مع المدير.';
-    if (typeof showNotification === 'function') {
-        showNotification(message, 'danger');
-    } else {
-        alert(message);
-    }
-}
-
-// Check if user has a specific permission
+// Permission checks
 export function hasPermission(permission) {
-    if (!currentUserData || !currentUserData.role) {
-        return false;
-    }
-
-    const userPermissions = ROLE_PERMISSIONS[currentUserData.role] || [];
-    return userPermissions.includes(permission);
+    const permissions = ROLE_PERMISSIONS[currentAccessRole] || [];
+    return permissions.includes(permission);
 }
 
-// Check if user has a specific role
 export function hasRole(role) {
-    return currentUserData && currentUserData.role === role;
+    return currentAccessRole === role;
 }
 
-// Get current user data
-export function getCurrentUser() {
-    return currentUserData;
-}
-
-// Get current user role
 export function getCurrentRole() {
-    return currentUserData ? currentUserData.role : null;
+    return currentAccessRole;
 }
 
-// Get role display name in Arabic
 export function getRoleDisplayName(role) {
     const roleNames = {
-        [ROLES.ADMIN]: 'مدير',
+        [ROLES.OWNER]: 'صاحب الشغل',
         [ROLES.TEAM_LEADER]: 'قائد فريق',
-        [ROLES.MODERATOR]: 'مشرف'
+        [ROLES.MODERATOR]: 'مشرف',
+        [ROLES.VIEWER]: 'عرض فقط'
     };
     return roleNames[role] || 'غير محدد';
 }
 
-// Apply UI restrictions based on permissions
+// Apply UI restrictions based on link role
 export function applyUIRestrictions() {
-    if (!currentUserData) return;
-
     // Hide tabs based on permissions
     if (!hasPermission(PERMISSIONS.VIEW_REPORTS)) {
         const reportsTab = document.querySelector('[data-tab="reports"]');
         if (reportsTab) reportsTab.style.display = 'none';
     }
-
     if (!hasPermission(PERMISSIONS.VIEW_EXPENSES)) {
         const expensesTab = document.querySelector('[data-tab="expenses"]');
         if (expensesTab) expensesTab.style.display = 'none';
     }
-
     if (!hasPermission(PERMISSIONS.VIEW_PROBLEMS)) {
         const problemsTab = document.querySelector('[data-tab="problems"]');
         if (problemsTab) problemsTab.style.display = 'none';
     }
-
     if (!hasPermission(PERMISSIONS.VIEW_ACCOUNTS)) {
         const accountsTab = document.querySelector('[data-tab="accounts"]');
         if (accountsTab) accountsTab.style.display = 'none';
@@ -247,114 +160,82 @@ export function applyUIRestrictions() {
         if (exportBtn) exportBtn.style.display = 'none';
     }
 
-    // Hide delete buttons if no permission
-    if (!hasPermission(PERMISSIONS.DELETE_SALE)) {
-        document.body.classList.add('hide-delete-sale-buttons');
-    }
+    // Hide destructive or restricted actions through CSS flags
+    if (!hasPermission(PERMISSIONS.DELETE_SALE)) document.body.classList.add('hide-delete-sale-buttons');
+    if (!hasPermission(PERMISSIONS.DELETE_ACCOUNT)) document.body.classList.add('hide-delete-account-buttons');
+    if (!hasPermission(PERMISSIONS.DELETE_EXPENSE)) document.body.classList.add('hide-delete-expense-buttons');
+    if (!hasPermission(PERMISSIONS.EDIT_SALE)) document.body.classList.add('hide-edit-sale-buttons');
+    if (!hasPermission(PERMISSIONS.EDIT_ACCOUNT)) document.body.classList.add('hide-edit-account-buttons');
+    if (!hasPermission(PERMISSIONS.EDIT_EXPENSE)) document.body.classList.add('hide-edit-expense-buttons');
+    if (!hasPermission(PERMISSIONS.CONFIRM_SALE)) document.body.classList.add('hide-confirm-sale-buttons');
+    if (!hasPermission(PERMISSIONS.MANAGE_RENEWALS)) document.body.classList.add('hide-renewal-management');
 
-    if (!hasPermission(PERMISSIONS.DELETE_ACCOUNT)) {
-        document.body.classList.add('hide-delete-account-buttons');
-    }
-
-    if (!hasPermission(PERMISSIONS.DELETE_EXPENSE)) {
-        document.body.classList.add('hide-delete-expense-buttons');
-    }
-
-    // Hide edit buttons based on permissions
-    if (!hasPermission(PERMISSIONS.EDIT_SALE)) {
-        document.body.classList.add('hide-edit-sale-buttons');
-    }
-
-    if (!hasPermission(PERMISSIONS.EDIT_ACCOUNT)) {
-        document.body.classList.add('hide-edit-account-buttons');
-    }
-
-    if (!hasPermission(PERMISSIONS.EDIT_EXPENSE)) {
-        document.body.classList.add('hide-edit-expense-buttons');
-    }
-
-    // Hide add buttons based on permissions
+    // Hide add buttons if not allowed
     if (!hasPermission(PERMISSIONS.ADD_ACCOUNT)) {
         const addAccountBtn = document.getElementById('toggle-add-account-form');
         if (addAccountBtn) addAccountBtn.style.display = 'none';
     }
-
     if (!hasPermission(PERMISSIONS.ADD_EXPENSE)) {
         const addExpenseBtn = document.getElementById('toggle-add-expense-form');
         if (addExpenseBtn) addExpenseBtn.style.display = 'none';
     }
-
     if (!hasPermission(PERMISSIONS.ADD_PROBLEM)) {
         const addProblemBtn = document.getElementById('toggle-add-problem-form');
         if (addProblemBtn) addProblemBtn.style.display = 'none';
     }
-
     if (!hasPermission(PERMISSIONS.ADD_PRODUCT)) {
         const addProductForm = document.getElementById('add-product-form');
         if (addProductForm) addProductForm.style.display = 'none';
     }
-
     if (!hasPermission(PERMISSIONS.ADD_SALE)) {
         const addSaleBtn = document.getElementById('toggle-add-sale-form');
         if (addSaleBtn) addSaleBtn.style.display = 'none';
     }
-
-    // Hide confirm buttons if no permission
-    if (!hasPermission(PERMISSIONS.CONFIRM_SALE)) {
-        document.body.classList.add('hide-confirm-sale-buttons');
-    }
-
-    // Hide renewal management if no permission
-    if (!hasPermission(PERMISSIONS.MANAGE_RENEWALS)) {
-        document.body.classList.add('hide-renewal-management');
-    }
-
-    // Add user info to header
-    addUserInfoToHeader();
 }
 
-// Add user info and logout button to header
-function addUserInfoToHeader() {
+// Add simple role badge to header
+function addAccessInfoToHeader() {
     const header = document.querySelector('header .p-4');
-    if (!header || !currentUserData) return;
+    if (!header) return;
+    if (document.getElementById('access-info-container')) return;
 
-    // Check if user info already exists
-    if (document.getElementById('user-info-container')) return;
-
-    const userInfoDiv = document.createElement('div');
-    userInfoDiv.id = 'user-info-container';
-    userInfoDiv.className = 'flex items-center gap-4 mt-4 sm:mt-0';
-    
     const roleColorClass = {
-        [ROLES.ADMIN]: 'bg-red-100 text-red-800',
+        [ROLES.OWNER]: 'bg-red-100 text-red-800',
         [ROLES.TEAM_LEADER]: 'bg-blue-100 text-blue-800',
-        [ROLES.MODERATOR]: 'bg-green-100 text-green-800'
-    }[currentUserData.role] || 'bg-gray-100 text-gray-800';
+        [ROLES.MODERATOR]: 'bg-green-100 text-green-800',
+        [ROLES.VIEWER]: 'bg-gray-100 text-gray-800'
+    }[currentAccessRole] || 'bg-gray-100 text-gray-800';
 
-    userInfoDiv.innerHTML = `
-        <div class="text-right hidden sm:block">
-            <p class="text-sm font-bold text-gray-800">${currentUserData.name}</p>
-            <p class="text-xs text-gray-500">${currentUserData.email}</p>
-        </div>
+    const div = document.createElement('div');
+    div.id = 'access-info-container';
+    div.className = 'flex items-center gap-3 mt-4 sm:mt-0';
+    const currentUrl = new URL(window.location.href);
+    div.innerHTML = `
         <span class="px-3 py-1 text-xs font-semibold rounded-full ${roleColorClass}">
-            ${getRoleDisplayName(currentUserData.role)}
+            ${getRoleDisplayName(currentAccessRole)}
         </span>
         ${hasPermission(PERMISSIONS.MANAGE_USERS) ? `
-        <button id="manage-users-btn" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-md text-sm transition-colors">
-            <i class="fas fa-users-cog ml-2"></i>إدارة المستخدمين
-        </button>` : ''}
-        <button id="logout-btn" class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-md text-sm transition-colors">
-            <i class="fas fa-sign-out-alt ml-2"></i>تسجيل الخروج
+        <button id="manage-users-btn" class="px-3 py-1 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-md text-xs transition-colors">
+            إدارة المستخدمين
+        </button>
+        ` : ''}
+        <button id="copy-link-btn" class="px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-md text-xs transition-colors">
+            نسخ الرابط الحالي
         </button>
     `;
-
-    header.appendChild(userInfoDiv);
+    header.appendChild(div);
+    document.getElementById('copy-link-btn')?.addEventListener('click', () => {
+        try {
+            navigator.clipboard.writeText(currentUrl.toString());
+            if (typeof showNotification === 'function') showNotification('تم نسخ الرابط', 'info');
+        } catch (e) {
+            alert('تعذر نسخ الرابط');
+        }
+    });
 }
 
-// Check if user has access to a specific section
+// Section access helpers (unchanged signature)
 export function checkSectionAccess(sectionName) {
-    if (!currentUserData) return false;
-
     const sectionPermissions = {
         'dashboard': [PERMISSIONS.VIEW_DASHBOARD],
         'reports': [PERMISSIONS.VIEW_REPORTS],
@@ -364,14 +245,11 @@ export function checkSectionAccess(sectionName) {
         'accounts': [PERMISSIONS.VIEW_ACCOUNTS],
         'expenses': [PERMISSIONS.VIEW_EXPENSES]
     };
-
     const requiredPermissions = sectionPermissions[sectionName];
-    if (!requiredPermissions) return true; // Allow access to unknown sections
-
-    return requiredPermissions.some(permission => hasPermission(permission));
+    if (!requiredPermissions) return true;
+    return requiredPermissions.some(p => hasPermission(p));
 }
 
-// Show unauthorized access message
 export function showUnauthorizedAccessMessage(sectionName) {
     const sectionNames = {
         'dashboard': 'لوحة التحكم',
@@ -382,21 +260,8 @@ export function showUnauthorizedAccessMessage(sectionName) {
         'accounts': 'إدارة الأكونتات',
         'expenses': 'المصروفات'
     };
-
     const sectionDisplayName = sectionNames[sectionName] || sectionName;
-    const message = `ليس لديك صلاحية للوصول إلى ${sectionDisplayName}. يرجى التواصل مع المدير.`;
-    
-    if (typeof showNotification === 'function') {
-        showNotification(message, 'danger');
-    } else {
-        alert(message);
-    }
-}
-
-// Logout function
-export async function logout(auth) {
-    if (confirm('هل أنت متأكد من تسجيل الخروج؟')) {
-        await signOut(auth);
-        window.location.href = 'login.html';
-    }
+    const message = `ليس لديك صلاحية للوصول إلى ${sectionDisplayName}.`;
+    if (typeof showNotification === 'function') showNotification(message, 'danger');
+    else alert(message);
 }
