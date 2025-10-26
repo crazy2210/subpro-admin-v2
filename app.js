@@ -1454,50 +1454,9 @@ function checkAndDisplayUnauthorizedScreens() {
     });
 }
 
-// Check authentication immediately on page load
+// Public mode: always allow access without redirecting to login
 async function checkAuthenticationOnLoad() {
-    try {
-        // Check if user is already authenticated
-        const user = auth.currentUser;
-        if (!user) {
-            window.location.href = 'login.html';
-            return false;
-        }
-
-        // Get user data from Firestore
-        const userDocRef = doc(db, 'users', user.uid);
-        const userDoc = await getDoc(userDocRef);
-
-        if (!userDoc.exists()) {
-            await signOut(auth);
-            window.location.href = 'login.html';
-            return false;
-        }
-
-        const userData = userDoc.data();
-        
-        // Check if user is active
-        if (!userData.isActive) {
-            await signOut(auth);
-            showNotification('حسابك غير مفعل. يرجى التواصل مع المدير.', 'danger');
-            window.location.href = 'login.html';
-            return false;
-        }
-
-        // Check if user has a role
-        if (!userData.role) {
-            await signOut(auth);
-            showNotification('لم يتم تعيين صلاحيات لك بعد. يرجى التواصل مع المدير.', 'danger');
-            window.location.href = 'login.html';
-            return false;
-        }
-
-        return true;
-    } catch (error) {
-        console.error("Authentication check failed:", error);
-        window.location.href = 'login.html';
-        return false;
-    }
+    return true;
 }
 
 // --- APP INITIALIZATION ---

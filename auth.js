@@ -6,7 +6,8 @@ import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/10
 export const ROLES = {
     ADMIN: 'admin',
     TEAM_LEADER: 'team_leader',
-    MODERATOR: 'moderator'
+    MODERATOR: 'moderator',
+    GUEST: 'guest'
 };
 
 // Permission definitions
@@ -49,6 +50,10 @@ export const PERMISSIONS = {
 const ROLE_PERMISSIONS = {
     [ROLES.ADMIN]: [
         // Admin has all permissions
+        ...Object.values(PERMISSIONS)
+    ],
+    // Guest mode gets full access in public deployment
+    [ROLES.GUEST]: [
         ...Object.values(PERMISSIONS)
     ],
     [ROLES.TEAM_LEADER]: [
@@ -98,64 +103,65 @@ let currentUserData = null;
 
 // Initialize authentication
 export async function initAuth(auth, db) {
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
         onAuthStateChanged(auth, async (user) => {
-            if (!user) {
-                // Not logged in, redirect to login page immediately
-                if (!window.location.pathname.includes('login.html')) {
-                    window.location.href = 'login.html';
-                }
-                reject(new Error('Not authenticated'));
-                return;
-            }
-
-            currentUser = user;
-
             try {
-                // Get user data from Firestore
+                if (!user) {
+                    // Public mode: fallback to guest admin
+                    currentUser = null;
+                    currentUserData = {
+                        uid: 'guest',
+                        name: 'زائر',
+                        email: '',
+                        role: ROLES.ADMIN,
+                        isActive: true
+                    };
+                    resolve(currentUserData);
+                    return;
+                }
+
+                currentUser = user;
                 const userDocRef = doc(db, 'users', user.uid);
                 const userDoc = await getDoc(userDocRef);
 
                 if (!userDoc.exists()) {
-                    // User document doesn't exist, redirect to login
-                    await signOut(auth);
-                    window.location.href = 'login.html';
-                    reject(new Error('User data not found'));
+                    // Fallback to guest admin if user doc missing
+                    currentUserData = {
+                        uid: 'guest',
+                        name: 'زائر',
+                        email: '',
+                        role: ROLES.ADMIN,
+                        isActive: true
+                    };
+                    resolve(currentUserData);
                     return;
                 }
 
                 currentUserData = userDoc.data();
 
-                // Check if user is active and has a role
-                if (!currentUserData.isActive) {
-                    await signOut(auth);
-                    showAccountInactiveMessage();
-                    window.location.href = 'login.html';
-                    reject(new Error('User not active'));
-                    return;
+                // If inactive or no role, fallback to guest admin
+                if (!currentUserData.isActive || !currentUserData.role) {
+                    currentUserData = {
+                        uid: 'guest',
+                        name: 'زائر',
+                        email: '',
+                        role: ROLES.ADMIN,
+                        isActive: true
+                    };
                 }
-
-                if (!currentUserData.role) {
-                    await signOut(auth);
-                    showNoRoleMessage();
-                    window.location.href = 'login.html';
-                    reject(new Error('No role assigned'));
-                    return;
-                }
-
-                console.log('User authenticated:', {
-                    name: currentUserData.name,
-                    role: currentUserData.role,
-                    email: currentUserData.email,
-                    isActive: currentUserData.isActive
-                });
 
                 resolve(currentUserData);
             } catch (error) {
-                console.error('Error fetching user data:', error);
-                await signOut(auth);
-                window.location.href = 'login.html';
-                reject(error);
+                // On any error, fallback to guest admin
+                currentUser = null;
+                currentUserData = {
+                    uid: 'guest',
+                    name: 'زائر',
+                    email: '',
+                    role: ROLES.ADMIN,
+                    isActive: true
+                };
+                resolve(currentUserData);
             }
         });
     });
