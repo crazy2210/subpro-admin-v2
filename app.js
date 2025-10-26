@@ -19,26 +19,60 @@ const auth = getAuth(app);
 // Global state variables
 let allSales = [], allExpenses = [], allAccounts = [], allProducts = [], allProblems = [];
 let dateRangeStart = null, dateRangeEnd = null;
-let flatpickrInstance = null;
+let expenseDateRangeStart = null, expenseDateRangeEnd = null;
+let flatpickrInstance = null, expenseFlatpickrInstance = null;
 let currentSalesProductFilter = 'all';
 let currentAccountsProductFilter = 'all';
-let currentStatusFilter = 'all'; 
+let currentAccountsStatusFilter = 'all';
+let currentStatusFilter = 'all';
+let currentExpenseTypeFilter = 'all';
 let monthlyChart, productProfitChart, expenseTypeChart, salesBySourceChart, traderAnalysisChart;
+let isDarkMode = localStorage.getItem('darkMode') === 'true';
 const PATH_SALES = 'sales', PATH_EXPENSES = 'expenses', PATH_ACCOUNTS = 'accounts', PATH_PRODUCTS = 'products', PATH_PROBLEMS = 'problems';
 
 // --- UTILITY & SETUP FUNCTIONS ---
 const setupChartDefaults = () => {
     Chart.defaults.font.family = "'Cairo', sans-serif";
     Chart.defaults.font.weight = '600';
-    Chart.defaults.color = '#64748b';
-    Chart.defaults.plugins.tooltip.backgroundColor = '#1e293b';
+    Chart.defaults.color = isDarkMode ? '#94a3b8' : '#64748b';
+    Chart.defaults.plugins.tooltip.backgroundColor = isDarkMode ? '#334155' : '#1e293b';
     Chart.defaults.plugins.tooltip.titleFont = { size: 14, weight: 'bold' };
     Chart.defaults.plugins.tooltip.bodyFont = { size: 12 };
     Chart.defaults.plugins.tooltip.padding = 10;
     Chart.defaults.plugins.tooltip.cornerRadius = 4;
-    Chart.defaults.plugins.legend.labels.color = '#1e293b';
+    Chart.defaults.plugins.legend.labels.color = isDarkMode ? '#f1f5f9' : '#1e293b';
     Chart.defaults.responsive = true;
     Chart.defaults.maintainAspectRatio = false;
+};
+
+// Dark Mode Toggle
+const toggleDarkMode = () => {
+    isDarkMode = !isDarkMode;
+    localStorage.setItem('darkMode', isDarkMode.toString());
+    document.body.classList.toggle('dark-mode', isDarkMode);
+    
+    const icon = document.querySelector('#dark-mode-toggle i');
+    icon.className = isDarkMode ? 'fa-solid fa-sun' : 'fa-solid fa-moon';
+    
+    // Update chart colors
+    setupChartDefaults();
+    
+    // Re-render charts if they exist
+    if (monthlyChart) renderData();
+};
+
+// Initialize dark mode on load
+const initDarkMode = () => {
+    if (isDarkMode) {
+        document.body.classList.add('dark-mode');
+        const icon = document.querySelector('#dark-mode-toggle i');
+        if (icon) icon.className = 'fa-solid fa-sun';
+    }
+    
+    const toggleBtn = document.getElementById('dark-mode-toggle');
+    if (toggleBtn) {
+        toggleBtn.addEventListener('click', toggleDarkMode);
+    }
 };
 
 const showNotification = (message, type = 'success') => {
@@ -77,13 +111,16 @@ const copyToClipboard = (text) => {
 
 const calculateExpiryDate = (startDate, subscription) => {
     if (!startDate?.seconds || !subscription || subscription === 'Lifetime') return null;
-    const expiry = new Date(startDate.seconds * 1000);
+    const start = new Date(startDate.seconds * 1000);
+    const expiry = new Date(start);
+    
     if (subscription.includes('Month')) {
         const months = parseInt(subscription.match(/\d+/)?.[0] || 1);
-        expiry.setMonth(expiry.getMonth() + months);
+        // Add 30 days per month instead of calendar months
+        expiry.setDate(start.getDate() + (months * 30));
     } else if (subscription.includes('Year')) {
         const years = parseInt(subscription.match(/\d+/)?.[0] || 1);
-        expiry.setFullYear(expiry.getFullYear() + years);
+        expiry.setDate(start.getDate() + (years * 365));
     } else { return null; }
     return expiry;
 };
@@ -125,9 +162,34 @@ const renderData = () => {
         salesToDisplay = salesToDisplay.filter(s => !s.isConfirmed);
     }
 
-    // Accounts specific filter
+    // Accounts specific filters
     if(currentAccountsProductFilter !== 'all'){
         accountsToDisplay = accountsToDisplay.filter(a => a.productName === currentAccountsProductFilter);
+    }
+    if(currentAccountsStatusFilter !== 'all'){
+        accountsToDisplay = accountsToDisplay.filter(a => {
+            if (currentAccountsStatusFilter === 'available') {
+                return a.is_active && a.current_uses < a.allowed_uses;
+            } else if (currentAccountsStatusFilter === 'unavailable') {
+                return !a.is_active || a.current_uses >= a.allowed_uses;
+            } else if (currentAccountsStatusFilter === 'inactive') {
+                return !a.is_active;
+            } else if (currentAccountsStatusFilter === 'completed') {
+                return a.current_uses >= a.allowed_uses && a.allowed_uses !== Infinity;
+            }
+            return true;
+        });
+    }
+    
+    // Expenses specific filters
+    if(expenseDateRangeStart && expenseDateRangeEnd) {
+        expensesToDisplay = expensesToDisplay.filter(e => {
+            const expenseDate = e.date?.seconds ? new Date(e.date.seconds * 1000) : null;
+            return expenseDate && expenseDate >= expenseDateRangeStart && expenseDate <= expenseDateRangeEnd;
+        });
+    }
+    if(currentExpenseTypeFilter !== 'all'){
+        expensesToDisplay = expensesToDisplay.filter(e => e.type === currentExpenseTypeFilter);
     }
 
     // Update all relevant UI components
@@ -139,6 +201,7 @@ const renderData = () => {
     updateAccountsTable(accountsToDisplay);
     updateExpensesTable(expensesToDisplay);
     populateProductFilterButtons();
+    updateProductStatistics(); // New detailed statistics per product
 };
 
 // --- UI UPDATE FUNCTIONS ---
@@ -610,17 +673,18 @@ const updateExpensesTable = (expensesData) => {
      table.innerHTML = ''; 
      const thead = document.createElement('thead');
      thead.className = 'bg-gray-50';
-     thead.innerHTML = `<tr><th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">التاريخ</th><th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">النوع</th><th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">الوصف</th><th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">المبلغ</th><th class="px-4 py-2"></th></tr>`;
+     thead.innerHTML = `<tr><th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">التاريخ</th><th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">النوع</th><th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">الفئة</th><th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">الوصف</th><th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">المبلغ</th><th class="px-4 py-2"></th></tr>`;
      table.appendChild(thead);
      const tbody = document.createElement('tbody');
      tbody.className = 'bg-white';
-     if (expensesData.length === 0) { tbody.innerHTML = `<tr><td colspan="5" class="text-center py-10 text-gray-500">لا توجد مصروفات لعرضها.</td></tr>`; }
+     if (expensesData.length === 0) { tbody.innerHTML = `<tr><td colspan="6" class="text-center py-10 text-gray-500">لا توجد مصروفات لعرضها.</td></tr>`; }
      else {
          const typeStyles = { 'إعلان': { icon: 'fa-solid fa-bullhorn', color: 'bg-red-100 text-red-800' }, 'اشتراكات تطبيقات': { icon: 'fa-solid fa-credit-card', color: 'bg-blue-100 text-blue-800' }, 'مصاريف أخرى': { icon: 'fa-solid fa-receipt', color: 'bg-yellow-100 text-yellow-800' } };
           expensesData.forEach(expense => {
               const row = document.createElement('tr');
               const style = typeStyles[expense.type] || typeStyles['مصاريف أخرى'];
-              row.innerHTML = `<td data-label="التاريخ" class="px-4 py-3 text-gray-600">${new Date(expense.date?.seconds * 1000).toLocaleDateString('ar-EG')}</td><td data-label="النوع" class="px-4 py-3"><span class="px-3 py-1 inline-flex text-sm leading-5 font-semibold rounded-full ${style.color}"><i class="${style.icon} ml-2"></i>${expense.type}</span></td><td data-label="الوصف" class="px-4 py-3 text-gray-600">${expense.description || '-'}</td><td data-label="المبلغ" class="px-4 py-3 font-semibold text-gray-900">${(expense.amount || 0).toFixed(2)}</td><td data-label="إجراءات" class="px-4 py-3 text-left"><div class="flex gap-2"><button data-id="${expense.id}" class="edit-expense-btn text-blue-500 hover:text-blue-700 font-semibold">تعديل</button><button data-id="${expense.id}" class="delete-expense-btn text-red-500 hover:text-red-700 font-semibold">حذف</button></div></td>`;
+              const expenseDate = expense.customDate || expense.date;
+              row.innerHTML = `<td data-label="التاريخ" class="px-4 py-3 text-gray-600">${new Date(expenseDate?.seconds * 1000).toLocaleDateString('ar-EG')}</td><td data-label="النوع" class="px-4 py-3"><span class="px-3 py-1 inline-flex text-sm leading-5 font-semibold rounded-full ${style.color}"><i class="${style.icon} ml-2"></i>${expense.type}</span></td><td data-label="الفئة" class="px-4 py-3 text-gray-600">${expense.category || '-'}</td><td data-label="الوصف" class="px-4 py-3 text-gray-600">${expense.description || '-'}</td><td data-label="المبلغ" class="px-4 py-3 font-semibold text-gray-900">${(expense.amount || 0).toFixed(2)}</td><td data-label="إجراءات" class="px-4 py-3 text-left"><div class="flex gap-2"><button data-id="${expense.id}" class="edit-expense-btn text-blue-500 hover:text-blue-700 font-semibold">تعديل</button><button data-id="${expense.id}" class="delete-expense-btn text-red-500 hover:text-red-700 font-semibold">حذف</button></div></td>`;
               tbody.appendChild(row);
           });
      }
@@ -628,7 +692,7 @@ const updateExpensesTable = (expensesData) => {
      const tfoot = document.createElement('tfoot');
      tfoot.className = 'bg-gray-50';
      const totalExpenses = expensesData.reduce((sum, exp) => sum + (exp.amount || 0), 0);
-     tfoot.innerHTML = `<tr class="border-t-2 border-gray-200"><td colspan="3" class="px-4 py-2 text-right font-bold text-gray-800">الإجمالي</td><td id="expenses-total" class="px-4 py-2 font-bold text-gray-800">EGP ${totalExpenses.toFixed(2)}</td><td></td></tr>`;
+     tfoot.innerHTML = `<tr class="border-t-2 border-gray-200"><td colspan="4" class="px-4 py-2 text-right font-bold text-gray-800">الإجمالي</td><td id="expenses-total" class="px-4 py-2 font-bold text-gray-800">EGP ${totalExpenses.toFixed(2)}</td><td></td></tr>`;
      table.appendChild(tfoot);
 };
 
@@ -699,6 +763,121 @@ const updateReports = (salesData, expensesData, accountsData) => {
 };
 
 const renderMonthlyChart=(l,r,e,p)=>{const t=document.getElementById("monthly-performance-chart").getContext("2d");monthlyChart&&monthlyChart.destroy(),monthlyChart=new Chart(t,{type:"line",data:{labels:l,datasets:[{label:"الدخل",data:r,borderColor:"#4f46e5",backgroundColor:"rgba(79, 70, 229, 0.1)",fill:!0,tension:.4},{label:"المصروفات",data:e,borderColor:"#ef4444",backgroundColor:"rgba(239, 68, 68, 0.1)",fill:!0,tension:.4},{label:"الربح",data:p,borderColor:"#22c55e",backgroundColor:"rgba(34, 197, 94, 0.1)",fill:!0,tension:.4}]},options:{scales:{y:{ticks:{color:"#64748b"},grid:{color:"#e2e8f0",borderDash:[5,5]}},x:{ticks:{color:"#64748b"},grid:{display:!1}}}}})};const renderProductProfitChart=(l,d)=>{const t=document.getElementById("profit-by-product-chart").getContext("2d");productProfitChart&&productProfitChart.destroy();const e=d.map(()=>`rgba(${Math.floor(255*Math.random())}, ${Math.floor(255*Math.random())}, ${Math.floor(255*Math.random())}, 0.8)`);productProfitChart=new Chart(t,{type:"bar",data:{labels:l,datasets:[{label:"الربح",data:d,backgroundColor:e,borderRadius:4}]},options:{indexAxis:"y",scales:{x:{ticks:{color:"#64748b"},grid:{color:"#e2e8f0",borderDash:[5,5]}},y:{ticks:{color:"#64748b"},grid:{display:!1}}}}})};const renderExpenseTypeChart=(l,d)=>{const t=document.getElementById("expenses-by-type-chart").getContext("2d");expenseTypeChart&&expenseTypeChart.destroy(),expenseTypeChart=new Chart(t,{type:"doughnut",data:{labels:l,datasets:[{data:d,backgroundColor:["#ef4444","#3b82f6","#f59e0b"],hoverOffset:4}]}})};const renderSalesBySourceChart=(l,d)=>{const t=document.getElementById("sales-by-source-chart").getContext("2d");salesBySourceChart&&salesBySourceChart.destroy();const e=l.map(()=>`rgba(${Math.floor(255*Math.random())}, ${Math.floor(255*Math.random())}, ${Math.floor(255*Math.random())}, 0.8)`);salesBySourceChart=new Chart(t,{type:"doughnut",data:{labels:l,datasets:[{label:"الدخل",data:d,backgroundColor:e,borderColor:"#f8fafc",borderWidth:4,hoverOffset:8}]},options:{plugins:{legend:{position:"bottom"}}}})};const renderTraderAnalysisChart=(l,d)=>{const t=document.getElementById("trader-analysis-chart").getContext("2d");traderAnalysisChart&&traderAnalysisChart.destroy();const e=d.map(()=>`rgba(${Math.floor(255*Math.random())}, ${Math.floor(255*Math.random())}, ${Math.floor(255*Math.random())}, 0.8)`);traderAnalysisChart=new Chart(t,{type:"bar",data:{labels:l,datasets:[{label:"إجمالي التكلفة",data:d,backgroundColor:e,borderRadius:4}]},options:{indexAxis:"y",scales:{x:{ticks:{color:"#64748b"},grid:{color:"#e2e8f0",borderDash:[5,5]}},y:{ticks:{color:"#64748b"},grid:{display:!1}}}}})};
+
+// New function for detailed product statistics
+const updateProductStatistics = () => {
+    const container = document.getElementById('product-statistics-container');
+    if (!container) return;
+    
+    const confirmedSales = allSales.filter(s => s.isConfirmed);
+    const productStats = {};
+    
+    // Calculate statistics per product
+    allProducts.forEach(product => {
+        const productSales = confirmedSales.filter(s => s.productName === product.name);
+        const productExpenses = allExpenses.filter(e => e.type === 'إعلان'); // Consider ad expenses for all
+        
+        // Current month
+        const now = new Date();
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        const currentMonthSales = productSales.filter(s => (s.date?.seconds * 1000) >= startOfMonth.getTime());
+        
+        // Previous month
+        const prevMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        const startOfPrevMonth = new Date(prevMonthDate.getFullYear(), prevMonthDate.getMonth(), 1);
+        const endOfPrevMonth = new Date(now.getFullYear(), now.getMonth(), 0);
+        endOfPrevMonth.setHours(23, 59, 59, 999);
+        const prevMonthSales = productSales.filter(s => (s.date?.seconds * 1000) >= startOfPrevMonth.getTime() && (s.date?.seconds * 1000) <= endOfPrevMonth.getTime());
+        
+        // Calculate stats
+        const totalSales = productSales.length;
+        const totalRevenue = productSales.reduce((sum, s) => sum + (s.sellingPrice || 0), 0);
+        const totalCost = productSales.reduce((sum, s) => sum + (s.costPrice || 0), 0);
+        const totalProfit = totalRevenue - totalCost;
+        
+        const currentMonthRevenue = currentMonthSales.reduce((sum, s) => sum + (s.sellingPrice || 0), 0);
+        const currentMonthCost = currentMonthSales.reduce((sum, s) => sum + (s.costPrice || 0), 0);
+        const currentMonthProfit = currentMonthRevenue - currentMonthCost;
+        
+        const prevMonthRevenue = prevMonthSales.reduce((sum, s) => sum + (s.sellingPrice || 0), 0);
+        const prevMonthCost = prevMonthSales.reduce((sum, s) => sum + (s.costPrice || 0), 0);
+        const prevMonthProfit = prevMonthRevenue - prevMonthCost;
+        
+        // Growth calculation
+        let growthRate = 0;
+        if (prevMonthProfit !== 0) {
+            growthRate = ((currentMonthProfit - prevMonthProfit) / Math.abs(prevMonthProfit) * 100);
+        } else if (currentMonthProfit > 0) {
+            growthRate = 100;
+        }
+        
+        // Renewals
+        const renewals = productSales.filter(s => s.renewalStatus === 'renewed').length;
+        
+        productStats[product.name] = {
+            totalSales,
+            totalRevenue,
+            totalCost,
+            totalProfit,
+            currentMonthSales: currentMonthSales.length,
+            currentMonthProfit,
+            growthRate,
+            renewals
+        };
+    });
+    
+    // Render statistics
+    container.innerHTML = Object.entries(productStats).map(([productName, stats]) => {
+        const growthIcon = stats.growthRate >= 0 ? 'fa-arrow-trend-up text-green-500' : 'fa-arrow-trend-down text-red-500';
+        const growthColor = stats.growthRate >= 0 ? 'text-green-600' : 'text-red-600';
+        
+        return `
+            <div class="main-card p-6">
+                <h3 class="text-2xl font-bold mb-4 text-gray-800">${productName}</h3>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div class="stat-mini">
+                        <i class="fa-solid fa-shopping-cart text-2xl text-blue-500 mb-2"></i>
+                        <p class="text-sm text-gray-500">إجمالي المبيعات</p>
+                        <p class="text-2xl font-bold text-gray-800">${stats.totalSales}</p>
+                    </div>
+                    <div class="stat-mini">
+                        <i class="fa-solid fa-dollar-sign text-2xl text-green-500 mb-2"></i>
+                        <p class="text-sm text-gray-500">إجمالي الدخل</p>
+                        <p class="text-2xl font-bold text-gray-800">${stats.totalRevenue.toFixed(2)}</p>
+                    </div>
+                    <div class="stat-mini">
+                        <i class="fa-solid fa-chart-line text-2xl text-purple-500 mb-2"></i>
+                        <p class="text-sm text-gray-500">إجمالي الربح</p>
+                        <p class="text-2xl font-bold ${stats.totalProfit >= 0 ? 'text-green-600' : 'text-red-600'}">${stats.totalProfit.toFixed(2)}</p>
+                    </div>
+                    <div class="stat-mini">
+                        <i class="fa-solid fa-percent text-2xl text-orange-500 mb-2"></i>
+                        <p class="text-sm text-gray-500">النمو الشهري</p>
+                        <p class="text-xl font-bold ${growthColor}">
+                            <i class="fa-solid ${growthIcon}"></i>
+                            ${stats.growthRate.toFixed(1)}%
+                        </p>
+                    </div>
+                </div>
+                <div class="mt-4 grid grid-cols-2 md:grid-cols-3 gap-4">
+                    <div class="bg-blue-50 p-3 rounded-lg">
+                        <p class="text-xs text-gray-600">مبيعات الشهر الحالي</p>
+                        <p class="text-lg font-bold text-blue-600">${stats.currentMonthSales}</p>
+                    </div>
+                    <div class="bg-green-50 p-3 rounded-lg">
+                        <p class="text-xs text-gray-600">ربح الشهر الحالي</p>
+                        <p class="text-lg font-bold text-green-600">${stats.currentMonthProfit.toFixed(2)}</p>
+                    </div>
+                    <div class="bg-purple-50 p-3 rounded-lg">
+                        <p class="text-xs text-gray-600">التجديدات</p>
+                        <p class="text-lg font-bold text-purple-600">${stats.renewals}</p>
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+};
+
 const renderProductList = () => {
     const container = document.getElementById('product-list');
     if (!container) return;
@@ -868,6 +1047,29 @@ const setupEventListeners = () => {
     });
     document.getElementById('clear-date-filter-btn').addEventListener('click', () => { if(flatpickrInstance) flatpickrInstance.clear(); });
     
+    // Expense date range filter
+    expenseFlatpickrInstance = flatpickr("#expense-date-range-filter", {
+        mode: "range", dateFormat: "Y-m-d", locale: "ar",
+        onChange: function(selectedDates) {
+            if (selectedDates.length === 0) { expenseDateRangeStart = null; expenseDateRangeEnd = null; } 
+            else if (selectedDates.length === 1) {
+                expenseDateRangeStart = new Date(selectedDates[0].setHours(0, 0, 0, 0));
+                expenseDateRangeEnd = new Date(selectedDates[0].setHours(23, 59, 59, 999));
+            } else {
+                expenseDateRangeStart = new Date(selectedDates[0].setHours(0, 0, 0, 0));
+                expenseDateRangeEnd = new Date(selectedDates[1].setHours(23, 59, 59, 999));
+            }
+            renderData();
+        }
+    });
+    document.getElementById('clear-expense-date-filter-btn').addEventListener('click', () => { if(expenseFlatpickrInstance) expenseFlatpickrInstance.clear(); });
+    
+    // Custom date picker for add sale form
+    flatpickr("#add-custom-date", { dateFormat: "Y-m-d", locale: "ar" });
+    
+    // Custom date picker for add expense form
+    flatpickr("#add-expense-custom-date", { dateFormat: "Y-m-d", locale: "ar" });
+    
     document.getElementById('export-sales-btn').addEventListener('click', exportSalesToExcel);
 
     document.body.addEventListener('click', (e) => {
@@ -877,6 +1079,28 @@ const setupEventListeners = () => {
         }
         if(e.target.closest('#accounts-product-filter-container .filter-btn')){
             currentAccountsProductFilter = e.target.closest('.filter-btn').dataset.product;
+            renderData();
+        }
+    });
+    
+    // Accounts status filter
+    document.getElementById('accounts-status-filter-container').addEventListener('click', (e) => {
+        if (e.target.classList.contains('filter-btn') || e.target.closest('.filter-btn')) {
+            const btn = e.target.classList.contains('filter-btn') ? e.target : e.target.closest('.filter-btn');
+            currentAccountsStatusFilter = btn.dataset.status;
+            document.querySelectorAll('#accounts-status-filter-container .filter-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            renderData();
+        }
+    });
+    
+    // Expense type filter
+    document.getElementById('expense-type-filter-container').addEventListener('click', (e) => {
+        if (e.target.classList.contains('filter-btn') || e.target.closest('.filter-btn')) {
+            const btn = e.target.classList.contains('filter-btn') ? e.target : e.target.closest('.filter-btn');
+            currentExpenseTypeFilter = btn.dataset.type;
+            document.querySelectorAll('#expense-type-filter-container .filter-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
             renderData();
         }
     });
@@ -1014,12 +1238,16 @@ const setupFormSubmissions = () => {
         submitBtn.disabled = true; submitBtn.textContent = 'جاري الإضافة...';
         try {
             const formData = new FormData(form);
+            const customDate = formData.get('customDate');
+            const saleDate = customDate ? new Date(customDate) : null;
+            
             if (isManualSale) {
                 const saleData = {
                     contactInfo: formData.get('contactInfo'), contactMethod: formData.get('contactMethod'), productName: formData.get('productName'),
                     accountType: formData.get('accountType'), subscription: formData.get('subscription'), sellingPrice: parseFloat(formData.get('sellingPrice')),
-                    costPrice: parseFloat(formData.get('costPrice')) || 0, // FIX: Handle empty cost
-                    customerEmail: formData.get('customerEmail'), accountId: null, date: serverTimestamp(),
+                    costPrice: parseFloat(formData.get('costPrice')) || 0,
+                    customerEmail: formData.get('customerEmail'), accountId: null, 
+                    date: saleDate ? { seconds: Math.floor(saleDate.getTime() / 1000) } : serverTimestamp(),
                     password: '',
                     isConfirmed: false
                 };
@@ -1043,7 +1271,8 @@ const setupFormSubmissions = () => {
                     const saleData = {
                         contactInfo: formData.get('contactInfo'), contactMethod: formData.get('contactMethod'), productName: formData.get('productName'),
                         accountType: accountType, subscription: formData.get('subscription'), sellingPrice: parseFloat(formData.get('sellingPrice')),
-                        costPrice: accountData.purchase_price, customerEmail: accountData.email, accountId: accountId, date: serverTimestamp(),
+                        costPrice: accountData.purchase_price, customerEmail: accountData.email, accountId: accountId, 
+                        date: saleDate ? { seconds: Math.floor(saleDate.getTime() / 1000) } : serverTimestamp(),
                         password: accountData.password || '',
                         isConfirmed: false 
                     };
@@ -1140,8 +1369,23 @@ const setupFormSubmissions = () => {
         submitBtn.disabled = true; submitBtn.textContent = 'جاري الإضافة...';
         const formData = new FormData(e.target);
         const data = Object.fromEntries(formData.entries());
+        const customDate = data.customDate;
+        const expenseDate = customDate ? new Date(customDate) : null;
+        
         try {
-            await addDoc(collection(db, PATH_EXPENSES), { ...data, amount: parseFloat(data.amount), date: serverTimestamp() });
+            const expenseData = {
+                type: data.type,
+                category: data.category || '',
+                amount: parseFloat(data.amount),
+                description: data.description || '',
+                date: serverTimestamp()
+            };
+            
+            if (expenseDate) {
+                expenseData.customDate = { seconds: Math.floor(expenseDate.getTime() / 1000) };
+            }
+            
+            await addDoc(collection(db, PATH_EXPENSES), expenseData);
             showNotification("تمت إضافة المصروف بنجاح!", "success");
             e.target.reset();
             document.getElementById('add-expense-container').classList.remove('open');
@@ -1467,6 +1711,7 @@ async function initializeAppAndListeners() {
         return;
     }
 
+    initDarkMode();
     setupChartDefaults();
     setupEventListeners();
     setupFormSubmissions();
