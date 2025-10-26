@@ -1,7 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getAuth, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import { getAuth } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 import { getFirestore, doc, onSnapshot, collection, query, addDoc, deleteDoc, serverTimestamp, orderBy, updateDoc, runTransaction, writeBatch, getDocs, getDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-import { initAuth, hasPermission, PERMISSIONS, logout, applyUIRestrictions, checkSectionAccess, showUnauthorizedAccessMessage } from './auth.js';
+import { initAccess, hasPermission, PERMISSIONS, applyUIRestrictions, checkSectionAccess, showUnauthorizedAccessMessage } from './auth.js';
 import { initUserManagement } from './users-management.js';
 
 const firebaseConfig = {
@@ -1454,90 +1454,20 @@ function checkAndDisplayUnauthorizedScreens() {
     });
 }
 
-// Check authentication immediately on page load
-async function checkAuthenticationOnLoad() {
-    try {
-        // Check if user is already authenticated
-        const user = auth.currentUser;
-        if (!user) {
-            window.location.href = 'login.html';
-            return false;
-        }
-
-        // Get user data from Firestore
-        const userDocRef = doc(db, 'users', user.uid);
-        const userDoc = await getDoc(userDocRef);
-
-        if (!userDoc.exists()) {
-            await signOut(auth);
-            window.location.href = 'login.html';
-            return false;
-        }
-
-        const userData = userDoc.data();
-        
-        // Check if user is active
-        if (!userData.isActive) {
-            await signOut(auth);
-            showNotification('حسابك غير مفعل. يرجى التواصل مع المدير.', 'danger');
-            window.location.href = 'login.html';
-            return false;
-        }
-
-        // Check if user has a role
-        if (!userData.role) {
-            await signOut(auth);
-            showNotification('لم يتم تعيين صلاحيات لك بعد. يرجى التواصل مع المدير.', 'danger');
-            window.location.href = 'login.html';
-            return false;
-        }
-
-        return true;
-    } catch (error) {
-        console.error("Authentication check failed:", error);
-        window.location.href = 'login.html';
-        return false;
-    }
-}
-
 // --- APP INITIALIZATION ---
 async function initializeAppAndListeners() {
-    // Check authentication immediately
-    const isAuthenticated = await checkAuthenticationOnLoad();
-    if (!isAuthenticated) {
-        return;
-    }
-
     setupChartDefaults();
     setupEventListeners();
     setupFormSubmissions();
     setupDynamicEventListeners();
 
-    // Initialize authentication and check permissions
-    try {
-        await initAuth(auth, db);
-        console.log("User authenticated successfully");
-        
-        // Apply UI restrictions based on user role
-        applyUIRestrictions();
-        
-        // Check and display unauthorized access screens
-        checkAndDisplayUnauthorizedScreens();
-        
-        // Initialize user management for admins
-        initUserManagement(db, showNotification);
-        
-        // Add logout button listener
-        document.body.addEventListener('click', (e) => {
-            if (e.target.closest('#logout-btn')) {
-                logout(auth);
-            }
-        });
-        
-    } catch (error) {
-        console.error("Authentication failed:", error);
-        return; // Stop initialization if auth fails
-    }
+    // Initialize link-based access and apply UI restrictions
+    await initAccess();
+    applyUIRestrictions();
+    checkAndDisplayUnauthorizedScreens();
+    
+    // Initialize user management (will no-op if not allowed)
+    initUserManagement(db, showNotification);
 
     // Fetch initial data to show the UI quickly, then set up real-time listeners
     try {
