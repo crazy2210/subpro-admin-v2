@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import { getAuth, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-import { getFirestore, doc, onSnapshot, collection, query, addDoc, deleteDoc, serverTimestamp, orderBy, updateDoc, runTransaction, writeBatch, getDocs, getDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { getFirestore, doc, onSnapshot, collection, query, addDoc, deleteDoc, serverTimestamp, orderBy, updateDoc, runTransaction, writeBatch, getDocs, getDoc, enableIndexedDbPersistence, enableNetwork, disableNetwork } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { initAuth, hasPermission, PERMISSIONS, logout, applyUIRestrictions, checkSectionAccess, showUnauthorizedAccessMessage } from './auth.js';
 import { initUserManagement } from './users-management.js';
 
@@ -15,6 +15,43 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
+
+// Enable offline persistence for better reliability
+try {
+    enableIndexedDbPersistence(db).catch((err) => {
+        if (err.code === 'failed-precondition') {
+            console.warn('تعذر تفعيل التخزين المؤقت: يوجد أكثر من تبويب مفتوح');
+        } else if (err.code === 'unimplemented') {
+            console.warn('المتصفح لا يدعم التخزين المؤقت');
+        }
+    });
+} catch (err) {
+    console.warn('خطأ في تفعيل التخزين المؤقت:', err);
+}
+
+// Connection state management
+let isConnected = navigator.onLine;
+let connectionRetryTimer = null;
+
+// Monitor online/offline status
+window.addEventListener('online', () => {
+    console.log('اتصال الإنترنت متاح');
+    isConnected = true;
+    updateConnectionStatus(true);
+    showNotification('تم استعادة الاتصال بالإنترنت', 'success');
+    // Retry connection after coming back online
+    if (connectionRetryTimer) clearTimeout(connectionRetryTimer);
+    connectionRetryTimer = setTimeout(() => {
+        location.reload();
+    }, 1000);
+});
+
+window.addEventListener('offline', () => {
+    console.log('فقد الاتصال بالإنترنت');
+    isConnected = false;
+    updateConnectionStatus(false);
+    showNotification('تم فقد الاتصال بالإنترنت', 'danger');
+});
 
 // Global state variables
 let allSales = [], allExpenses = [], allAccounts = [], allProducts = [], allProblems = [], allAdCampaigns = [];
@@ -93,6 +130,82 @@ const showNotification = (message, type = 'success') => {
     else if (type === 'danger') notification.classList.add('bg-danger');
     else if (type === 'info') notification.classList.add('bg-info');
     setTimeout(() => { notification.classList.remove('show'); }, 3000);
+};
+
+// Update connection status indicator in UI
+const updateConnectionStatus = (connected) => {
+    // Create or update connection status indicator if it doesn't exist
+    let statusIndicator = document.getElementById('connection-status');
+    
+    if (!statusIndicator) {
+        statusIndicator = document.createElement('div');
+        statusIndicator.id = 'connection-status';
+        statusIndicator.style.cssText = `
+            position: fixed;
+            top: 80px;
+            left: 20px;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            transition: all 0.3s ease;
+        `;
+        document.body.appendChild(statusIndicator);
+    }
+    
+    if (connected) {
+        statusIndicator.style.backgroundColor = '#10b981';
+        statusIndicator.style.color = 'white';
+        statusIndicator.innerHTML = '<i class="fas fa-check-circle"></i> متصل';
+        // Auto-hide after 3 seconds when connected
+        setTimeout(() => {
+            statusIndicator.style.opacity = '0';
+        }, 3000);
+    } else {
+        statusIndicator.style.backgroundColor = '#ef4444';
+        statusIndicator.style.color = 'white';
+        statusIndicator.style.opacity = '1';
+        statusIndicator.innerHTML = '<i class="fas fa-exclamation-circle"></i> غير متصل';
+    }
+};
+
+// Handle Firebase errors with user-friendly messages
+const handleFirebaseError = (error, operation = 'العملية') => {
+    console.error(`خطأ في ${operation}:`, error);
+    
+    let errorMessage = `حدث خطأ في ${operation}`;
+    
+    // Check for common Firebase error codes
+    if (error.code === 'unavailable' || error.code === 'failed-precondition') {
+        errorMessage = 'فقد الاتصال بالخادم. يرجى التحقق من اتصال الإنترنت.';
+        updateConnectionStatus(false);
+    } else if (error.code === 'permission-denied') {
+        errorMessage = 'ليس لديك صلاحية لتنفيذ هذه العملية.';
+    } else if (error.code === 'not-found') {
+        errorMessage = 'البيانات المطلوبة غير موجودة.';
+    } else if (error.code === 'already-exists') {
+        errorMessage = 'البيانات موجودة بالفعل.';
+    } else if (error.code === 'resource-exhausted') {
+        errorMessage = 'تم تجاوز الحد المسموح. حاول مرة أخرى لاحقاً.';
+    } else if (error.code === 'cancelled') {
+        errorMessage = 'تم إلغاء العملية.';
+    } else if (error.code === 'unauthenticated') {
+        errorMessage = 'يرجى تسجيل الدخول مرة أخرى.';
+    } else if (!navigator.onLine) {
+        errorMessage = 'لا يوجد اتصال بالإنترنت.';
+        updateConnectionStatus(false);
+    } else if (error.message) {
+        // Include the actual error message for debugging
+        console.error('تفاصيل الخطأ:', error.message);
+    }
+    
+    showNotification(errorMessage, 'danger');
+    return errorMessage;
 };
 
 const copyToClipboard = (text) => {
@@ -1232,12 +1345,12 @@ const setupEventListeners = () => {
         const deleteAdBtn = e.target.closest('.delete-ad-campaign-btn');
         if (deleteAdBtn) {
             if (confirm('هل أنت متأكد من حذف هذه الحملة الإعلانية؟')) {
-                try {
-                    await deleteDoc(doc(db, PATH_AD_CAMPAIGNS, deleteAdBtn.dataset.id));
-                    showNotification('تم حذف الحملة بنجاح', 'success');
-                } catch (error) {
-                    showNotification('حدث خطأ أثناء الحذف', 'danger');
-                }
+            try {
+                await deleteDoc(doc(db, PATH_AD_CAMPAIGNS, deleteAdBtn.dataset.id));
+                showNotification('تم حذف الحملة بنجاح', 'success');
+            } catch (error) {
+                handleFirebaseError(error, 'حذف الحملة الإعلانية');
+            }
             }
         }
     });
@@ -1257,7 +1370,9 @@ const setupFormSubmissions = () => {
                 await addDoc(collection(db, PATH_PRODUCTS), { name: productName });
                 showNotification(`تمت إضافة منتج "${productName}" بنجاح!`, 'success');
                 form.reset();
-            } catch (error) { showNotification('خطأ في إضافة المنتج.', 'danger'); }
+            } catch (error) { 
+                handleFirebaseError(error, 'إضافة المنتج');
+            }
         }
     });
 
@@ -1735,7 +1850,9 @@ const setupDynamicEventListeners = () => {
                 try {
                     await deleteDoc(doc(db, PATH_PRODUCTS, productId));
                     showNotification('تم حذف المنتج.', 'danger');
-                } catch (error) { showNotification('خطأ في حذف المنتج.', 'danger'); }
+                } catch (error) { 
+                    handleFirebaseError(error, 'حذف المنتج');
+                }
             }
         } 
         else if (target.matches('.edit-account-btn')) {
@@ -2280,6 +2397,14 @@ function updateAdProductFilters() {
 
 // --- APP INITIALIZATION ---
 async function initializeAppAndListeners() {
+    // Check connection status on load
+    updateConnectionStatus(navigator.onLine);
+    
+    if (!navigator.onLine) {
+        console.warn('بدء التشغيل في وضع عدم الاتصال');
+        showNotification('تم البدء في وضع عدم الاتصال. بعض الميزات قد لا تعمل.', 'info');
+    }
+    
     // Check authentication immediately
     const isAuthenticated = await checkAuthenticationOnLoad();
     if (!isAuthenticated) {
@@ -2350,33 +2475,113 @@ async function initializeAppAndListeners() {
 
     } catch (error) {
         console.error("Error fetching initial data:", error);
-        document.getElementById('dashboard-loader').innerHTML = `<p class="text-red-500">فشل الاتصال بقاعدة البيانات. الرجاء تحديث الصفحة.</p>`;
+        
+        // Show more specific error message
+        let errorMessage = 'فشل الاتصال بقاعدة البيانات.';
+        if (error.code === 'unavailable') {
+            errorMessage = 'خطأ في الاتصال بالخادم. تحقق من اتصال الإنترنت.';
+        } else if (error.code === 'permission-denied') {
+            errorMessage = 'تم رفض الصلاحية. يرجى تسجيل الدخول مرة أخرى.';
+        } else if (error.message) {
+            errorMessage = `خطأ: ${error.message}`;
+        }
+        
+        document.getElementById('dashboard-loader').innerHTML = `
+            <div class="text-center py-10">
+                <div class="text-red-500 text-xl font-bold mb-4">
+                    <i class="fas fa-exclamation-triangle text-4xl mb-4"></i>
+                    <p>${errorMessage}</p>
+                </div>
+                <button onclick="location.reload()" class="primary-btn mt-4">
+                    <i class="fas fa-sync-alt ml-2"></i>إعادة تحميل الصفحة
+                </button>
+            </div>
+        `;
+        
+        showNotification(errorMessage, "danger");
     }
 
-    onSnapshot(query(collection(db, PATH_SALES), orderBy("date", "desc")), snap => { 
-        allSales = snap.docs.map(d => ({ id: d.id, ...d.data() })); 
-        renderData(); 
-        renderRenewalsTab();
-        if (shiftDatePicker && shiftDatePicker.selectedDates.length > 0) {
-            renderShiftStatistics(shiftDatePicker.selectedDates[0]);
+    // Set up real-time listeners with error handling
+    onSnapshot(
+        query(collection(db, PATH_SALES), orderBy("date", "desc")), 
+        snap => { 
+            allSales = snap.docs.map(d => ({ id: d.id, ...d.data() })); 
+            renderData(); 
+            renderRenewalsTab();
+            if (shiftDatePicker && shiftDatePicker.selectedDates.length > 0) {
+                renderShiftStatistics(shiftDatePicker.selectedDates[0]);
+            }
+        },
+        error => {
+            console.error("خطأ في الاستماع للمبيعات:", error);
+            showNotification("فقد الاتصال بقاعدة بيانات المبيعات. جاري إعادة المحاولة...", "danger");
         }
-    });
-    onSnapshot(query(collection(db, PATH_EXPENSES), orderBy("date", "desc")), snap => { allExpenses = snap.docs.map(d => ({ id: d.id, ...d.data() })); renderData(); });
-    onSnapshot(query(collection(db, PATH_ACCOUNTS), orderBy("purchase_date", "desc")), snap => { allAccounts = snap.docs.map(d => ({ id: d.id, ...d.data() })); renderData(); });
-    onSnapshot(query(collection(db, PATH_PRODUCTS), orderBy("name")), snap => { 
-        allProducts = snap.docs.map(d => ({ id: d.id, ...d.data() })); 
-        populateProductDropdowns(); 
-        renderProductList(); 
-        renderData();
-        updateAdProductFilters();
-    });
-    onSnapshot(query(collection(db, PATH_PROBLEMS), orderBy("date", "desc")), snap => { allProblems = snap.docs.map(d => ({ id: d.id, ...d.data() })); renderData(); });
-    onSnapshot(query(collection(db, PATH_AD_CAMPAIGNS), orderBy("createdAt", "desc")), snap => { 
-        allAdCampaigns = snap.docs.map(d => ({ id: d.id, ...d.data() })); 
-        renderAdvertisingSection();
-        updateAdProductFilters();
-        renderData(); // To update ROAS calculations in dashboard
-    });
+    );
+    
+    onSnapshot(
+        query(collection(db, PATH_EXPENSES), orderBy("date", "desc")), 
+        snap => { 
+            allExpenses = snap.docs.map(d => ({ id: d.id, ...d.data() })); 
+            renderData(); 
+        },
+        error => {
+            console.error("خطأ في الاستماع للمصروفات:", error);
+            showNotification("فقد الاتصال بقاعدة بيانات المصروفات. جاري إعادة المحاولة...", "danger");
+        }
+    );
+    
+    onSnapshot(
+        query(collection(db, PATH_ACCOUNTS), orderBy("purchase_date", "desc")), 
+        snap => { 
+            allAccounts = snap.docs.map(d => ({ id: d.id, ...d.data() })); 
+            renderData(); 
+        },
+        error => {
+            console.error("خطأ في الاستماع للحسابات:", error);
+            showNotification("فقد الاتصال بقاعدة بيانات الحسابات. جاري إعادة المحاولة...", "danger");
+        }
+    );
+    
+    onSnapshot(
+        query(collection(db, PATH_PRODUCTS), orderBy("name")), 
+        snap => { 
+            allProducts = snap.docs.map(d => ({ id: d.id, ...d.data() })); 
+            populateProductDropdowns(); 
+            renderProductList(); 
+            renderData();
+            updateAdProductFilters();
+        },
+        error => {
+            console.error("خطأ في الاستماع للمنتجات:", error);
+            showNotification("فقد الاتصال بقاعدة بيانات المنتجات. جاري إعادة المحاولة...", "danger");
+        }
+    );
+    
+    onSnapshot(
+        query(collection(db, PATH_PROBLEMS), orderBy("date", "desc")), 
+        snap => { 
+            allProblems = snap.docs.map(d => ({ id: d.id, ...d.data() })); 
+            renderData(); 
+        },
+        error => {
+            console.error("خطأ في الاستماع للمشاكل:", error);
+            showNotification("فقد الاتصال بقاعدة بيانات المشاكل. جاري إعادة المحاولة...", "danger");
+        }
+    );
+    
+    onSnapshot(
+        query(collection(db, PATH_AD_CAMPAIGNS), orderBy("createdAt", "desc")), 
+        snap => { 
+            allAdCampaigns = snap.docs.map(d => ({ id: d.id, ...d.data() })); 
+            renderAdvertisingSection();
+            updateAdProductFilters();
+            renderData(); // To update ROAS calculations in dashboard
+        },
+        error => {
+            console.error("خطأ في الاستماع للحملات الإعلانية:", error);
+            showNotification("فقد الاتصال بقاعدة بيانات الحملات الإعلانية. جاري إعادة المحاولة...", "danger");
+        }
+    );
 }
 
 initializeAppAndListeners();
