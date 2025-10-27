@@ -71,9 +71,9 @@ const PATH_SALES = 'sales', PATH_EXPENSES = 'expenses', PATH_ACCOUNTS = 'account
 
 // Shift definitions (24-hour format)
 const SHIFTS = {
-    NIGHT: { name: 'الشيفت الليلي', start: 0, end: 8, color: 'from-indigo-500 to-purple-600' },
-    MORNING: { name: 'شيفت الصباح', start: 8, end: 16, color: 'from-yellow-500 to-orange-500' },
-    EVENING: { name: 'الشيفت المسائي', start: 16, end: 24, color: 'from-blue-500 to-cyan-500' }
+    NIGHT: { name: 'الشيفت الليلي (12ص - 8ص)', start: 0, end: 8, color: 'from-indigo-500 to-purple-600', icon: 'fa-moon' },
+    MORNING: { name: 'شيفت الصباح (8ص - 4م)', start: 8, end: 16, color: 'from-yellow-500 to-orange-500', icon: 'fa-sun' },
+    EVENING: { name: 'شيفت العصر (4م - 12ص)', start: 16, end: 24, color: 'from-blue-500 to-cyan-500', icon: 'fa-cloud-sun' }
 };
 
 // --- UTILITY & SETUP FUNCTIONS ---
