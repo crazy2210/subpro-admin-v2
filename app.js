@@ -78,10 +78,6 @@ const SHIFTS = {
 
 // --- UTILITY & SETUP FUNCTIONS ---
 const setupChartDefaults = () => {
-    if (typeof Chart === 'undefined') {
-        console.warn('Chart.js not loaded yet');
-        return;
-    }
     Chart.defaults.font.family = "'Cairo', sans-serif";
     Chart.defaults.font.weight = '600';
     Chart.defaults.color = isDarkMode ? '#94a3b8' : '#64748b';
@@ -2401,38 +2397,30 @@ function updateAdProductFilters() {
 
 // --- APP INITIALIZATION ---
 async function initializeAppAndListeners() {
-    console.log('🚀 بدء تهيئة التطبيق...');
-    
     // Check connection status on load
     updateConnectionStatus(navigator.onLine);
     
     if (!navigator.onLine) {
-        console.warn('⚠️ بدء التشغيل في وضع عدم الاتصال');
+        console.warn('بدء التشغيل في وضع عدم الاتصال');
         showNotification('تم البدء في وضع عدم الاتصال. بعض الميزات قد لا تعمل.', 'info');
     }
     
-    console.log('🔐 فحص المصادقة...');
     // Check authentication immediately
     const isAuthenticated = await checkAuthenticationOnLoad();
     if (!isAuthenticated) {
-        console.error('❌ فشل المصادقة');
         return;
     }
-    console.log('✅ تم التحقق من المصادقة');
 
-    console.log('⚙️ تهيئة الإعدادات الأساسية...');
     initDarkMode();
     setupChartDefaults();
     setupEventListeners();
     setupFormSubmissions();
     setupDynamicEventListeners();
-    console.log('✅ تم إعداد الإعدادات الأساسية');
 
     // Initialize authentication and check permissions
     try {
-        console.log('🔑 تهيئة نظام المصادقة والأذونات...');
         await initAuth(auth, db);
-        console.log("✅ تم التحقق من المستخدم بنجاح");
+        console.log("User authenticated successfully");
         
         // Apply UI restrictions based on user role
         applyUIRestrictions();
@@ -2451,13 +2439,12 @@ async function initializeAppAndListeners() {
         });
         
     } catch (error) {
-        console.error("❌ فشل المصادقة:", error);
+        console.error("Authentication failed:", error);
         return; // Stop initialization if auth fails
     }
 
     // Fetch initial data to show the UI quickly, then set up real-time listeners
     try {
-        console.log('📊 جلب البيانات الأولية من Firebase...');
         const [salesSnap, expensesSnap, accountsSnap, productsSnap, problemsSnap, adCampaignsSnap] = await Promise.all([
             getDocs(query(collection(db, PATH_SALES), orderBy("date", "desc"))),
             getDocs(query(collection(db, PATH_EXPENSES), orderBy("date", "desc"))),
@@ -2474,9 +2461,6 @@ async function initializeAppAndListeners() {
         allProblems = problemsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
         allAdCampaigns = adCampaignsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
 
-        console.log(`✅ تم جلب البيانات: ${allSales.length} مبيعة، ${allAccounts.length} حساب، ${allProducts.length} منتج`);
-        
-        console.log('🎨 عرض البيانات في الواجهة...');
         populateProductDropdowns();
         renderProductList();
         renderData();
@@ -2486,11 +2470,8 @@ async function initializeAppAndListeners() {
         // Initialize shift statistics with today's date
         renderShiftStatistics(new Date());
         
-        console.log('✅ إخفاء شاشة التحميل وعرض المحتوى');
         document.getElementById('dashboard-loader').classList.add('hidden');
         document.getElementById('dashboard-content').classList.remove('hidden');
-        
-        console.log('🎉 تم تحميل التطبيق بنجاح!');
 
     } catch (error) {
         console.error("Error fetching initial data:", error);
@@ -2603,83 +2584,4 @@ async function initializeAppAndListeners() {
     );
 }
 
-// Wait for all required libraries to load before initializing
-function waitForLibraries() {
-    console.log('⏳ انتظار تحميل المكتبات المطلوبة...');
-    return new Promise((resolve, reject) => {
-        const timeout = setTimeout(() => {
-            console.error('❌ انتهت مهلة تحميل المكتبات');
-            reject(new Error('انتهت مهلة تحميل المكتبات. تحقق من اتصال الإنترنت.'));
-        }, 10000); // 10 seconds timeout
-        
-        const checkLibraries = () => {
-            const chartLoaded = typeof Chart !== 'undefined';
-            const flatpickrLoaded = typeof flatpickr !== 'undefined';
-            const xlsxLoaded = typeof XLSX !== 'undefined';
-            
-            if (chartLoaded && flatpickrLoaded && xlsxLoaded) {
-                console.log('✅ تم تحميل جميع المكتبات بنجاح');
-                clearTimeout(timeout);
-                resolve();
-            } else {
-                const missing = [];
-                if (!chartLoaded) missing.push('Chart.js');
-                if (!flatpickrLoaded) missing.push('Flatpickr');
-                if (!xlsxLoaded) missing.push('XLSX');
-                console.log(`⏳ انتظار المكتبات: ${missing.join(', ')}`);
-                setTimeout(checkLibraries, 100);
-            }
-        };
-        checkLibraries();
-    });
-}
-
-// Initialize app when DOM and libraries are ready
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', async () => {
-        try {
-            await waitForLibraries();
-            await initializeAppAndListeners();
-        } catch (error) {
-            console.error('فشل تهيئة التطبيق:', error);
-            const loader = document.getElementById('dashboard-loader');
-            if (loader) {
-                loader.innerHTML = `
-                    <div class="text-center py-10">
-                        <div class="text-red-500 text-xl font-bold mb-4">
-                            <i class="fas fa-exclamation-triangle text-4xl mb-4"></i>
-                            <p>حدث خطأ أثناء تحميل التطبيق</p>
-                            <p class="text-sm mt-2">${error.message}</p>
-                        </div>
-                        <button onclick="location.reload()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-6 rounded-md mt-4">
-                            <i class="fas fa-sync-alt ml-2"></i>إعادة تحميل الصفحة
-                        </button>
-                    </div>
-                `;
-            }
-        }
-    });
-} else {
-    waitForLibraries().then(async () => {
-        try {
-            await initializeAppAndListeners();
-        } catch (error) {
-            console.error('فشل تهيئة التطبيق:', error);
-            const loader = document.getElementById('dashboard-loader');
-            if (loader) {
-                loader.innerHTML = `
-                    <div class="text-center py-10">
-                        <div class="text-red-500 text-xl font-bold mb-4">
-                            <i class="fas fa-exclamation-triangle text-4xl mb-4"></i>
-                            <p>حدث خطأ أثناء تحميل التطبيق</p>
-                            <p class="text-sm mt-2">${error.message}</p>
-                        </div>
-                        <button onclick="location.reload()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-6 rounded-md mt-4">
-                            <i class="fas fa-sync-alt ml-2"></i>إعادة تحميل الصفحة
-                        </button>
-                    </div>
-                `;
-            }
-        }
-    });
-}
+initializeAppAndListeners();
