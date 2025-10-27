@@ -620,7 +620,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
         import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-        import { getFirestore, doc, onSnapshot, collection, query, addDoc, deleteDoc, serverTimestamp, orderBy, updateDoc, runTransaction, writeBatch, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+        import { getFirestore, doc, onSnapshot, collection, query, addDoc, deleteDoc, serverTimestamp, orderBy, updateDoc, runTransaction, writeBatch, getDocs, enableIndexedDbPersistence } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
         
         const firebaseConfig = {
             apiKey: "AIzaSyAmO9EZt_56rqEdBqxkyJW8ROZDWQ-LDAU",
@@ -633,6 +633,23 @@
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
         const auth = getAuth(app);
+
+        // Enable offline persistence for better reliability
+        try {
+            enableIndexedDbPersistence(db).catch((err) => {
+                if (err.code === 'failed-precondition') {
+                    console.warn('تعذر تفعيل التخزين المؤقت: يوجد أكثر من تبويب مفتوح');
+                } else if (err.code === 'unimplemented') {
+                    console.warn('المتصفح لا يدعم التخزين المؤقت');
+                }
+            });
+        } catch (err) {
+            console.warn('خطأ في تفعيل التخزين المؤقت:', err);
+        }
+
+        // Connection state management
+        let isConnected = navigator.onLine;
+        let connectionRetryTimer = null;
 
         // Global state variables
         let allSales = [], allExpenses = [], allAccounts = [], allProducts = [], allProblems = [];
@@ -669,6 +686,98 @@
             else if (type === 'info') notification.classList.add('bg-info');
             setTimeout(() => { notification.classList.remove('show'); }, 3000);
         };
+
+        // Update connection status indicator
+        const updateConnectionStatus = (connected) => {
+            let statusIndicator = document.getElementById('connection-status');
+            
+            if (!statusIndicator) {
+                statusIndicator = document.createElement('div');
+                statusIndicator.id = 'connection-status';
+                statusIndicator.style.cssText = `
+                    position: fixed;
+                    top: 80px;
+                    left: 20px;
+                    padding: 8px 16px;
+                    border-radius: 20px;
+                    font-size: 12px;
+                    font-weight: 600;
+                    z-index: 1000;
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+                    transition: all 0.3s ease;
+                `;
+                document.body.appendChild(statusIndicator);
+            }
+            
+            if (connected) {
+                statusIndicator.style.backgroundColor = '#10b981';
+                statusIndicator.style.color = 'white';
+                statusIndicator.innerHTML = '<i class="fas fa-check-circle"></i> متصل';
+                // Auto-hide after 3 seconds when connected
+                setTimeout(() => {
+                    statusIndicator.style.opacity = '0';
+                }, 3000);
+            } else {
+                statusIndicator.style.backgroundColor = '#ef4444';
+                statusIndicator.style.color = 'white';
+                statusIndicator.style.opacity = '1';
+                statusIndicator.innerHTML = '<i class="fas fa-exclamation-circle"></i> غير متصل';
+            }
+        };
+
+        // Handle Firebase errors with user-friendly messages
+        const handleFirebaseError = (error, operation = 'العملية') => {
+            console.error(`خطأ في ${operation}:`, error);
+            
+            let errorMessage = `حدث خطأ في ${operation}`;
+            
+            if (error.code === 'unavailable' || error.code === 'failed-precondition') {
+                errorMessage = 'فقد الاتصال بالخادم. يرجى التحقق من اتصال الإنترنت.';
+                updateConnectionStatus(false);
+            } else if (error.code === 'permission-denied') {
+                errorMessage = 'ليس لديك صلاحية لتنفيذ هذه العملية.';
+            } else if (error.code === 'not-found') {
+                errorMessage = 'البيانات المطلوبة غير موجودة.';
+            } else if (error.code === 'already-exists') {
+                errorMessage = 'البيانات موجودة بالفعل.';
+            } else if (error.code === 'resource-exhausted') {
+                errorMessage = 'تم تجاوز الحد المسموح. حاول مرة أخرى لاحقاً.';
+            } else if (error.code === 'cancelled') {
+                errorMessage = 'تم إلغاء العملية.';
+            } else if (error.code === 'unauthenticated') {
+                errorMessage = 'يرجى تسجيل الدخول مرة أخرى.';
+            } else if (!navigator.onLine) {
+                errorMessage = 'لا يوجد اتصال بالإنترنت.';
+                updateConnectionStatus(false);
+            } else if (error.message) {
+                console.error('تفاصيل الخطأ:', error.message);
+            }
+            
+            showNotification(errorMessage, 'danger');
+            return errorMessage;
+        };
+
+        // Monitor online/offline status
+        window.addEventListener('online', () => {
+            console.log('اتصال الإنترنت متاح');
+            isConnected = true;
+            updateConnectionStatus(true);
+            showNotification('تم استعادة الاتصال بالإنترنت', 'success');
+            if (connectionRetryTimer) clearTimeout(connectionRetryTimer);
+            connectionRetryTimer = setTimeout(() => {
+                location.reload();
+            }, 1000);
+        });
+
+        window.addEventListener('offline', () => {
+            console.log('فقد الاتصال بالإنترنت');
+            isConnected = false;
+            updateConnectionStatus(false);
+            showNotification('تم فقد الاتصال بالإنترنت', 'danger');
+        });
 
         const copyToClipboard = (text) => {
             if (navigator.clipboard && window.isSecureContext) {
@@ -1973,13 +2082,27 @@
             setupFormSubmissions();
             setupDynamicEventListeners();
 
+            // Check connection status on load
+            updateConnectionStatus(navigator.onLine);
+            
+            if (!navigator.onLine) {
+                showNotification('تم البدء في وضع عدم الاتصال. بعض الميزات قد لا تعمل.', 'info');
+            }
+
             try {
                 await signInAnonymously(auth);
                 console.log("Signed in anonymously to Firebase.");
             } catch (error) {
                 console.error("Firebase anonymous sign-in failed:", error);
-                showNotification("فشل الاتصال بالخادم. برجاء تحديث الصفحة.", "danger");
-                document.getElementById('dashboard-loader').innerHTML = `<p class="text-red-500">فشل المصادقة مع الخادم. تأكد من تفعيل "تسجيل الدخول المجهول" في إعدادات Firebase.</p>`;
+                handleFirebaseError(error, 'تسجيل الدخول');
+                document.getElementById('dashboard-loader').innerHTML = `
+                    <div class="text-center">
+                        <p class="text-red-500 mb-4">فشل المصادقة مع الخادم</p>
+                        <button onclick="location.reload()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-md">
+                            <i class="fas fa-redo ml-2"></i>إعادة المحاولة
+                        </button>
+                    </div>
+                `;
                 return;
             }
 
@@ -2008,14 +2131,79 @@
 
             } catch (error) {
                 console.error("Error fetching initial data:", error);
-                document.getElementById('dashboard-loader').innerHTML = `<p class="text-red-500">فشل الاتصال بقاعدة البيانات. الرجاء تحديث الصفحة.</p>`;
+                handleFirebaseError(error, 'تحميل البيانات الأولية');
+                document.getElementById('dashboard-loader').innerHTML = `
+                    <div class="text-center">
+                        <p class="text-red-500 mb-4">فشل الاتصال بقاعدة البيانات</p>
+                        <button onclick="location.reload()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-md">
+                            <i class="fas fa-redo ml-2"></i>إعادة المحاولة
+                        </button>
+                    </div>
+                `;
             }
 
-            onSnapshot(query(collection(db, PATH_SALES), orderBy("date", "desc")), snap => { allSales = snap.docs.map(d => ({ id: d.id, ...d.data() })); renderData(); });
-            onSnapshot(query(collection(db, PATH_EXPENSES), orderBy("date", "desc")), snap => { allExpenses = snap.docs.map(d => ({ id: d.id, ...d.data() })); renderData(); });
-            onSnapshot(query(collection(db, PATH_ACCOUNTS), orderBy("purchase_date", "desc")), snap => { allAccounts = snap.docs.map(d => ({ id: d.id, ...d.data() })); renderData(); });
-            onSnapshot(query(collection(db, PATH_PRODUCTS), orderBy("name")), snap => { allProducts = snap.docs.map(d => ({ id: d.id, ...d.data() })); populateProductDropdowns(); renderProductList(); renderData(); });
-            onSnapshot(query(collection(db, PATH_PROBLEMS), orderBy("date", "desc")), snap => { allProblems = snap.docs.map(d => ({ id: d.id, ...d.data() })); renderData(); });
+            // Set up real-time listeners with error handling
+            onSnapshot(
+                query(collection(db, PATH_SALES), orderBy("date", "desc")), 
+                snap => { 
+                    allSales = snap.docs.map(d => ({ id: d.id, ...d.data() })); 
+                    renderData(); 
+                },
+                error => {
+                    console.error("خطأ في الاستماع للمبيعات:", error);
+                    showNotification("فقد الاتصال بقاعدة بيانات المبيعات. جاري إعادة المحاولة...", "danger");
+                }
+            );
+            
+            onSnapshot(
+                query(collection(db, PATH_EXPENSES), orderBy("date", "desc")), 
+                snap => { 
+                    allExpenses = snap.docs.map(d => ({ id: d.id, ...d.data() })); 
+                    renderData(); 
+                },
+                error => {
+                    console.error("خطأ في الاستماع للمصروفات:", error);
+                    showNotification("فقد الاتصال بقاعدة بيانات المصروفات. جاري إعادة المحاولة...", "danger");
+                }
+            );
+            
+            onSnapshot(
+                query(collection(db, PATH_ACCOUNTS), orderBy("purchase_date", "desc")), 
+                snap => { 
+                    allAccounts = snap.docs.map(d => ({ id: d.id, ...d.data() })); 
+                    renderData(); 
+                },
+                error => {
+                    console.error("خطأ في الاستماع للحسابات:", error);
+                    showNotification("فقد الاتصال بقاعدة بيانات الحسابات. جاري إعادة المحاولة...", "danger");
+                }
+            );
+            
+            onSnapshot(
+                query(collection(db, PATH_PRODUCTS), orderBy("name")), 
+                snap => { 
+                    allProducts = snap.docs.map(d => ({ id: d.id, ...d.data() })); 
+                    populateProductDropdowns(); 
+                    renderProductList(); 
+                    renderData(); 
+                },
+                error => {
+                    console.error("خطأ في الاستماع للمنتجات:", error);
+                    showNotification("فقد الاتصال بقاعدة بيانات المنتجات. جاري إعادة المحاولة...", "danger");
+                }
+            );
+            
+            onSnapshot(
+                query(collection(db, PATH_PROBLEMS), orderBy("date", "desc")), 
+                snap => { 
+                    allProblems = snap.docs.map(d => ({ id: d.id, ...d.data() })); 
+                    renderData(); 
+                },
+                error => {
+                    console.error("خطأ في الاستماع للمشاكل:", error);
+                    showNotification("فقد الاتصال بقاعدة بيانات المشاكل. جاري إعادة المحاولة...", "danger");
+                }
+            );
         }
 
         initializeAppAndListeners();
