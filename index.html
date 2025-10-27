@@ -3,40 +3,173 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SubPro | نظام إدارة الاشتراكات الاحترافي</title>
-    
-    <!-- Resource Hints for better performance -->
-    <link rel="preconnect" href="https://cdn.tailwindcss.com" crossorigin>
-    <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
-    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
-    <link rel="preconnect" href="https://npmcdn.com" crossorigin>
-    <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
-    <link rel="dns-prefetch" href="https://cdn.tailwindcss.com">
-    <link rel="dns-prefetch" href="https://cdnjs.cloudflare.com">
-    <link rel="dns-prefetch" href="https://cdn.jsdelivr.net">
-    
-    <!-- Optimized font loading with font-display: swap -->
-    <link rel="preload" href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" as="style" onload="this.onload=null;this.rel='stylesheet'">
-    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap"></noscript>
-    
-    <!-- Optimized CSS -->
-    <link rel="stylesheet" href="styles.css">
+    <title>SubPro | لوحة الأداء المالي</title>
+    <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
-    
-    <!-- Preload critical scripts -->
-    <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js">
-    <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js">
-    <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js">
-    
-    <!-- Non-critical scripts loaded with defer -->
-    <script src="https://cdn.tailwindcss.com" defer></script>
-    <script src="https://cdn.jsdelivr.net/npm/flatpickr" defer></script>
-    <script src="https://npmcdn.com/flatpickr/dist/l10n/ar.js" defer></script>
-    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    <script src="https://npmcdn.com/flatpickr/dist/l10n/ar.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap');
+        :root {
+            --primary-color: #4f46e5;
+            --primary-color-light: #e0e7ff;
+            --background-color: #f8fafc;
+            --card-background: #ffffff;
+            --text-primary: #1e293b;
+            --text-secondary: #64748b;
+            --border-color: #e2e8f0;
+        }
+        body {
+            font-family: 'Cairo', sans-serif;
+            background-color: var(--background-color);
+            color: var(--text-primary);
+        }
+        .container { max-width: 1600px; margin: 0 auto; padding: 0 1rem; }
+        .hidden { display: none; }
+        #notification {position:fixed;top:20px;left:50%;transform:translateX(-50%);z-index:1050;padding:1rem 1.5rem;border-radius:.5rem;color:white;font-weight:700;box-shadow:0 4px 6px rgba(0,0,0,.1);opacity:0;transition:opacity .3s ease-in-out}#notification.show{opacity:1}.bg-success{background-color:#22c55e}.bg-danger{background-color:#ef4444}.bg-info{background-color:#3b82f6}#edit-modal-backdrop, #edit-account-modal-backdrop, #edit-expense-modal-backdrop, #problem-modal-backdrop{position:fixed;top:0;left:0;width:100%;height:100%;background-color:rgba(15, 23, 42, 0.7);backdrop-filter: blur(4px);z-index:1040}#edit-modal, #edit-account-modal, #edit-expense-modal, #problem-modal{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:1050;width:90%;max-width:600px; color: #1e293b;}
+        .collapsible-content{max-height:0;overflow:hidden;transition:max-height .5s ease-in-out}.collapsible-content.open{max-height:1000px}
+        .table-container{max-height:650px;overflow-y:auto;}
+        
+        .main-card {
+            background-color: var(--card-background);
+            border-radius: 0.75rem;
+            border: 1px solid var(--border-color);
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -2px rgba(0,0,0,0.05);
+            transition: all 0.2s ease-in-out;
+        }
+        .nav-tab {
+            padding: 0.75rem 1.25rem;
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            border-bottom: 3px solid transparent;
+            transition: all 0.2s ease;
+            position: relative;
+        }
+        .nav-tab:hover {
+            color: var(--primary-color);
+            background-color: var(--primary-color-light);
+        }
+        .nav-tab.active {
+            color: var(--primary-color);
+            border-bottom-color: var(--primary-color);
+            font-weight: 700;
+        }
+        #renewals-count {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            background-color: #ef4444;
+            color: white;
+            border-radius: 9999px;
+            width: 20px;
+            height: 20px;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+        }
+        .form-input, .flatpickr-input {
+             border: 1px solid var(--border-color);
+             background-color: var(--card-background) !important;
+             color: var(--text-primary) !important;
+             border-radius: 0.5rem;
+             padding: 0.6rem 0.75rem;
+             transition: all 0.2s ease;
+        }
+        .form-input::placeholder { color: var(--text-secondary); }
+        .form-input:focus, .flatpickr-input:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 2px var(--primary-color-light);
+        }
+        .primary-btn {
+            background-color: var(--primary-color);
+            color: white;
+            font-weight: 700;
+            padding: 0.6rem 1.5rem;
+            border-radius: 0.5rem;
+            transition: all 0.2s ease;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .primary-btn:hover {
+            background-color: #4338ca;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+        }
+        .confirm-btn {
+            background-color: #22c55e; color: white; font-weight: 600; padding: 0.2rem 0.8rem;
+            border-radius: 9999px; transition: all 0.2s ease;
+        }
+        .confirm-btn:hover { background-color: #16a34a; }
+        .date-separator {
+            display: flex; align-items: center; text-align: center;
+            color: #64748b; font-size: 0.875rem; font-weight: 600;
+            margin: 1.5rem 0 1rem;
+        }
+        .date-separator::before, .date-separator::after {
+            content: ''; flex-grow: 1; height: 1px; background-color: #e2e8f0;
+        }
+        .date-separator::before { margin-left: 1rem; }
+        .date-separator::after { margin-right: 1rem; }
+        .profit-card-sale {
+            background-color: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 0.5rem;
+            padding: 1rem;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+        .filter-btn {
+            padding: 0.5rem 1rem;
+            border-radius: 9999px;
+            font-weight: 600;
+            font-size: 0.875rem;
+            color: #64748b;
+            background-color: #e2e8f0;
+            transition: all 0.2s ease;
+        }
+        .filter-btn:hover {
+            background-color: #cbd5e1;
+        }
+        .filter-btn.active {
+            background-color: #4f46e5;
+            color: white;
+        }
+        .copyable {
+            cursor: pointer;
+            position: relative;
+        }
+        .copyable:hover::after {
+            content: "انقر للنسخ";
+            position: absolute;
+            top: -30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: #333;
+            color: #fff;
+            font-size: 12px;
+            padding: 4px 8px;
+            border-radius: 4px;
+            white-space: nowrap;
+            opacity: 0.8;
+            transition: opacity 0.2s ease-in-out;
+            direction: rtl;
+        }
+        .stat-card {
+            padding: 1.25rem;
+            color: white;
+            border-radius: 0.75rem;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -2px rgba(0,0,0,0.06);
+        }
+        @media (max-width: 768px){.responsive-table thead{display:none}.responsive-table tr{display:block;margin-bottom:1rem;border:1px solid var(--border-color);border-radius:.5rem;overflow:hidden}.responsive-table td{display:flex;justify-content:space-between;align-items:center;padding:.75rem 1rem;text-align:left;border-bottom:1px solid var(--background-color)}.responsive-table td:last-child{border-bottom:none}.responsive-table td:before{content:attr(data-label);font-weight:600;margin-left:.5rem;color:var(--text-secondary)}}
+    </style>
 </head>
 <body class="p-4 md:p-8">
 
@@ -46,44 +179,32 @@
         <header class="main-card mb-8">
             <div class="p-4 sm:p-6 flex flex-wrap justify-between items-center gap-4 border-b border-b-[var(--border-color)]">
                 <div>
-                    <h1 class="text-3xl font-bold text-gray-800">
-                        <i class="fa-solid fa-crown text-yellow-500 ml-2"></i>
-                        SubPro - نظام إدارة الاشتراكات الاحترافي
-                    </h1>
-                    <p class="text-gray-500 mt-1">إدارة متكاملة للاشتراكات، الطلبات، والإحصائيات المتقدمة</p>
+                    <h1 class="text-3xl font-bold text-gray-800">SubPro Dashboard</h1>
+                    <p class="text-gray-500 mt-1">نظرة شاملة على أداء مشروعك المالي.</p>
                 </div>
             </div>
             <nav class="flex flex-wrap">
                 <button class="nav-tab active" data-tab="dashboard">
-                    <i class="fa-solid fa-chart-pie ml-2"></i>لوحة التحكم
-                </button>
-                <button class="nav-tab" data-tab="sales">
-                    <i class="fa-solid fa-shopping-cart ml-2"></i>إدارة الطلبات
-                </button>
-                <button class="nav-tab" data-tab="shifts">
-                    <i class="fa-solid fa-clock ml-2"></i>إحصائيات الشيفتات
-                </button>
-                <button class="nav-tab" data-tab="renewals">
-                    <i class="fa-solid fa-rotate ml-2"></i>نظام التجديدات
-                    <span id="renewals-count" class="hidden"></span>
-                </button>
-                <button class="nav-tab" data-tab="accounts">
-                    <i class="fa-solid fa-users ml-2"></i>إدارة الاشتراكات
-                </button>
-                <button class="nav-tab" data-tab="advertising">
-                    <i class="fa-solid fa-bullhorn ml-2"></i>إدارة الإعلانات
+                    <i class="fa-solid fa-chart-pie ml-2"></i>الرئيسية
                 </button>
                  <button class="nav-tab" data-tab="reports">
-                    <i class="fa-solid fa-chart-line ml-2"></i>التقارير المتقدمة
+                    <i class="fa-solid fa-chart-line ml-2"></i>التقارير
                 </button>
-                <button class="nav-tab" data-tab="product-stats">
-                    <i class="fa-solid fa-chart-bar ml-2"></i>إحصائيات المنتجات
+                <button class="nav-tab" data-tab="sales">
+                    <i class="fa-solid fa-receipt ml-2"></i>سجل المبيعات
+                </button>
+                <button class="nav-tab" data-tab="renewals">
+                    <i class="fa-solid fa-bell ml-2"></i>التنبيهات
+                    <span id="renewals-count" class="hidden"></span>
                 </button>
                 <button class="nav-tab" data-tab="problems">
                     <i class="fa-solid fa-bug ml-2"></i>المشاكل
                 </button>
+                <button class="nav-tab" data-tab="accounts">
+                    <i class="fa-solid fa-users ml-2"></i>إدارة الأكونتات
+                </button>
                 <button class="nav-tab" data-tab="expenses">
-                    <i class="fa-solid fa-file-invoice-dollar ml-2"></i>المصروفات الأخرى
+                    <i class="fa-solid fa-file-invoice-dollar ml-2"></i>المصروفات
                 </button>
             </nav>
         </header>
@@ -107,16 +228,6 @@
                     <!-- Dashboard cards will be rendered here by JavaScript -->
                 </div>
              </div>
-        </div>
-
-        <div id="product-stats-section" class="tab-content hidden">
-            <div class="mb-6">
-                <h2 class="text-3xl font-bold text-gray-800 mb-2">إحصائيات المنتجات التفصيلية</h2>
-                <p class="text-gray-600">عرض تفصيلي لأداء كل منتج على حدة</p>
-            </div>
-            <div id="product-statistics-container" class="space-y-6">
-                <p class="text-center py-10 text-gray-500">جاري تحميل الإحصائيات...</p>
-            </div>
         </div>
 
         <div id="reports-section" class="tab-content hidden space-y-8">
@@ -164,10 +275,6 @@
                     <div class="mt-4 p-4 lg:p-6 bg-slate-50 rounded-lg border border-slate-200">
                         <form id="add-sale-form" class="space-y-4">
                             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                <div>
-                                    <label class="block mb-1 text-sm font-medium text-gray-700">تاريخ مخصص (اختياري)</label>
-                                    <input type="text" id="add-custom-date" name="customDate" class="form-input w-full" placeholder="اختر تاريخ محدد..." />
-                                </div>
                                 <div>
                                     <label class="block mb-1 text-sm font-medium text-gray-700">بيانات التواصل</label>
                                     <input type="text" id="add-contactInfo" name="contactInfo" class="form-input w-full" required />
@@ -269,177 +376,11 @@
             </div>
         </div>
         
-        <!-- Shifts Statistics Section -->
-        <div id="shifts-section" class="tab-content hidden">
-            <div class="mb-6">
-                <h2 class="text-3xl font-bold text-gray-800 mb-2">
-                    <i class="fa-solid fa-clock text-indigo-600 ml-2"></i>
-                    إحصائيات الشيفتات
-                </h2>
-                <p class="text-gray-600">تحليل تفصيلي للطلبات حسب الشيفتات الثلاث اليومية</p>
-            </div>
-
-            <div class="main-card p-6 mb-6">
-                <div class="flex flex-wrap gap-4 items-center justify-center mb-6 pb-6 border-b border-b-[var(--border-color)]">
-                    <label class="font-semibold text-gray-700">اختر التاريخ:</label>
-                    <div class="relative">
-                        <input type="text" id="shift-date-filter" placeholder="اختر تاريخ..." class="form-input pl-10 text-center cursor-pointer">
-                        <i class="fa-solid fa-calendar-days absolute top-1/2 left-3 -translate-y-1/2 text-gray-500 pointer-events-none"></i>
-                    </div>
-                    <button id="shift-today-btn" class="primary-btn text-sm py-2 px-4">
-                        <i class="fa-solid fa-calendar-day mr-2"></i>اليوم
-                    </button>
-                </div>
-
-                <div id="shifts-statistics-container" class="space-y-6">
-                    <p class="text-center py-10 text-gray-500">اختر تاريخاً لعرض الإحصائيات...</p>
-                </div>
-            </div>
-        </div>
-
-        <!-- Renewals System Section -->
         <div id="renewals-section" class="tab-content hidden">
-            <div class="mb-6">
-                <h2 class="text-3xl font-bold text-gray-800 mb-2">
-                    <i class="fa-solid fa-rotate text-green-600 ml-2"></i>
-                    نظام التجديدات الذكي
-                </h2>
-                <p class="text-gray-600">إدارة ومتابعة تجديدات الاشتراكات بدقة عالية</p>
-            </div>
-            
             <div class="main-card p-4 sm:p-6 w-full">
-                <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-                    <button class="renewal-filter-btn filter-btn active" data-filter="all">
-                        <i class="fa-solid fa-list mr-1"></i>كل التجديدات
-                    </button>
-                    <button class="renewal-filter-btn filter-btn" data-filter="urgent">
-                        <i class="fa-solid fa-exclamation-triangle mr-1"></i>عاجل (خلال 3 أيام)
-                    </button>
-                    <button class="renewal-filter-btn filter-btn" data-filter="soon">
-                        <i class="fa-solid fa-clock mr-1"></i>قريب (خلال 7 أيام)
-                    </button>
-                    <button class="renewal-filter-btn filter-btn" data-filter="expired">
-                        <i class="fa-solid fa-times-circle mr-1"></i>منتهي
-                    </button>
-                </div>
-                
+                <h2 class="text-2xl font-bold text-gray-800 mb-6">تنبيهات تجديد الاشتراك</h2>
                 <div id="renewals-list-container">
-                    <p class="text-center py-10 text-gray-500">جاري تحميل التجديدات...</p>
-                </div>
-            </div>
-        </div>
-
-        <!-- Advertising Management Section -->
-        <div id="advertising-section" class="tab-content hidden">
-            <div class="mb-6">
-                <h2 class="text-3xl font-bold text-gray-800 mb-2">
-                    <i class="fa-solid fa-bullhorn text-purple-600 ml-2"></i>
-                    إدارة الإعلانات والحملات التسويقية
-                </h2>
-                <p class="text-gray-600">تتبع وتحليل مصاريف الإعلانات وأدائها لكل منتج</p>
-            </div>
-
-            <!-- Add Advertising Campaign -->
-            <div class="main-card p-6 mb-6">
-                <div class="flex justify-between items-center mb-4">
-                    <h3 class="text-xl font-bold text-gray-800">إضافة حملة إعلانية</h3>
-                    <button id="toggle-ad-campaign-form" class="primary-btn text-sm">
-                        <i class="fa-solid fa-plus mr-2"></i>إضافة حملة
-                    </button>
-                </div>
-
-                <div id="add-ad-campaign-container" class="collapsible-content">
-                    <form id="add-ad-campaign-form" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
-                        <div>
-                            <label class="block mb-1 text-sm font-medium text-gray-700">المنتج</label>
-                            <select name="productName" class="form-input w-full ad-campaign-product" required>
-                                <option value="">اختر المنتج...</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label class="block mb-1 text-sm font-medium text-gray-700">منصة الإعلان</label>
-                            <select name="platform" class="form-input w-full" required>
-                                <option value="">اختر المنصة...</option>
-                                <option value="Facebook">Facebook Ads</option>
-                                <option value="Instagram">Instagram Ads</option>
-                                <option value="Google">Google Ads</option>
-                                <option value="TikTok">TikTok Ads</option>
-                                <option value="Snapchat">Snapchat Ads</option>
-                                <option value="Other">أخرى</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label class="block mb-1 text-sm font-medium text-gray-700">المبلغ المنفق</label>
-                            <input type="number" step="0.01" name="amount" class="form-input w-full" required />
-                        </div>
-                        <div>
-                            <label class="block mb-1 text-sm font-medium text-gray-700">تاريخ البداية</label>
-                            <input type="text" name="startDate" class="form-input w-full ad-start-date" placeholder="اختر التاريخ..." />
-                        </div>
-                        <div>
-                            <label class="block mb-1 text-sm font-medium text-gray-700">تاريخ النهاية (اختياري)</label>
-                            <input type="text" name="endDate" class="form-input w-full ad-end-date" placeholder="اختر التاريخ..." />
-                        </div>
-                        <div class="md:col-span-2 lg:col-span-1">
-                            <label class="block mb-1 text-sm font-medium text-gray-700">ملاحظات</label>
-                            <input type="text" name="notes" class="form-input w-full" placeholder="معلومات إضافية..." />
-                        </div>
-                        <div class="md:col-span-2 lg:col-span-3 flex justify-center pt-4">
-                            <button type="submit" class="primary-btn">
-                                <i class="fa-solid fa-plus mr-2"></i>إضافة الحملة
-                            </button>
-                        </div>
-                    </form>
-                </div>
-            </div>
-
-            <!-- Advertising Statistics -->
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-                <div class="main-card p-6">
-                    <h3 class="text-xl font-bold mb-4 text-gray-800">
-                        <i class="fa-solid fa-chart-pie text-purple-600 mr-2"></i>
-                        توزيع الإنفاق الإعلاني حسب المنتج
-                    </h3>
-                    <div class="h-80 flex items-center justify-center">
-                        <canvas id="ad-spend-by-product-chart"></canvas>
-                    </div>
-                </div>
-                <div class="main-card p-6">
-                    <h3 class="text-xl font-bold mb-4 text-gray-800">
-                        <i class="fa-solid fa-chart-line text-green-600 mr-2"></i>
-                        عائد الاستثمار الإعلاني (ROAS)
-                    </h3>
-                    <div class="h-80">
-                        <canvas id="roas-by-product-chart"></canvas>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Advertising Campaigns List -->
-            <div class="main-card p-6">
-                <h3 class="text-xl font-bold mb-4 text-gray-800">قائمة الحملات الإعلانية</h3>
-                
-                <div class="flex flex-wrap gap-2 mb-4">
-                    <button class="filter-btn active ad-product-filter" data-product="all">كل المنتجات</button>
-                </div>
-
-                <div class="overflow-x-auto">
-                    <table id="ad-campaigns-table" class="min-w-full responsive-table">
-                        <thead class="bg-gray-50">
-                            <tr>
-                                <th class="px-4 py-3 text-right text-xs font-bold text-gray-700 uppercase">المنتج</th>
-                                <th class="px-4 py-3 text-right text-xs font-bold text-gray-700 uppercase">المنصة</th>
-                                <th class="px-4 py-3 text-right text-xs font-bold text-gray-700 uppercase">المبلغ</th>
-                                <th class="px-4 py-3 text-right text-xs font-bold text-gray-700 uppercase">التاريخ</th>
-                                <th class="px-4 py-3 text-right text-xs font-bold text-gray-700 uppercase">الإجراءات</th>
-                            </tr>
-                        </thead>
-                        <tbody id="ad-campaigns-tbody" class="bg-white divide-y divide-gray-200">
-                            <tr>
-                                <td colspan="5" class="text-center py-10 text-gray-500">جاري تحميل الحملات...</td>
-                            </tr>
-                        </tbody>
-                    </table>
+                    <p class="text-center py-10 text-gray-500">جاري تحميل التنبيهات...</p>
                 </div>
             </div>
         </div>
@@ -535,22 +476,6 @@
                      </div>
 
                      <div id="accounts-product-filter-container" class="my-4 flex flex-wrap gap-2 justify-center"></div>
-                     
-                     <div id="accounts-status-filter-container" class="my-4 flex flex-wrap gap-2 justify-center">
-                        <button class="filter-btn active" data-status="all">كل الحسابات</button>
-                        <button class="filter-btn" data-status="available">
-                            <i class="fa-solid fa-circle-check mr-1"></i>متاح للاستخدام
-                        </button>
-                        <button class="filter-btn" data-status="unavailable">
-                            <i class="fa-solid fa-circle-xmark mr-1"></i>غير متاح
-                        </button>
-                        <button class="filter-btn" data-status="inactive">
-                            <i class="fa-solid fa-ban mr-1"></i>غير نشط
-                        </button>
-                        <button class="filter-btn" data-status="completed">
-                            <i class="fa-solid fa-check-double mr-1"></i>مكتمل
-                        </button>
-                     </div>
 
                      <input type="text" id="search-accounts-input" class="form-input w-full mb-4" placeholder="ابحث في الأكونتات بالإيميل أو اسم التاجر..." />
                      <div class="overflow-x-auto table-container">
@@ -577,45 +502,13 @@
                          <i class="fa-solid fa-plus mr-2"></i> إضافة مصروف
                      </button>
                 </div>
-                
-                <div class="flex flex-wrap gap-4 items-center justify-center mb-6 pb-6 border-b border-b-[var(--border-color)]">
-                    <label class="font-semibold text-gray-700">فلترة حسب التاريخ:</label>
-                    <div class="relative">
-                        <input type="text" id="expense-date-range-filter" placeholder="اختر فترة زمنية..." class="form-input pl-10 text-center cursor-pointer">
-                        <i class="fa-solid fa-calendar-days absolute top-1/2 left-3 -translate-y-1/2 text-gray-500 pointer-events-none"></i>
-                    </div>
-                    <button id="clear-expense-date-filter-btn" class="bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold py-2 px-4 rounded-md transition-colors text-sm">
-                        <i class="fa-solid fa-xmark mr-2"></i>مسح
-                    </button>
-                </div>
-                
-                <div id="expense-type-filter-container" class="my-4 flex flex-wrap gap-2 justify-center">
-                    <button class="filter-btn active" data-type="all">كل الأنواع</button>
-                    <button class="filter-btn" data-type="إعلان">
-                        <i class="fa-solid fa-bullhorn mr-1"></i>إعلان
-                    </button>
-                    <button class="filter-btn" data-type="اشتراكات تطبيقات">
-                        <i class="fa-solid fa-credit-card mr-1"></i>اشتراكات تطبيقات
-                    </button>
-                    <button class="filter-btn" data-type="مصاريف أخرى">
-                        <i class="fa-solid fa-receipt mr-1"></i>مصاريف أخرى
-                    </button>
-                </div>
                 <div id="add-expense-container" class="collapsible-content">
                     <div class="mt-4 p-4 lg:p-6 bg-slate-50 rounded-lg border border-slate-200">
                              <form id="add-expense-form">
-                                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-4">
-                                     <div>
-                                          <label class="block mb-1 text-sm font-medium text-gray-700">تاريخ مخصص (اختياري)</label>
-                                          <input type="text" id="add-expense-custom-date" name="customDate" class="form-input w-full" placeholder="اختر تاريخ محدد..." />
-                                     </div>
+                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
                                      <div>
                                           <label class="block mb-1 text-sm font-medium text-gray-700">نوع المصروف</label>
                                           <select name="type" class="form-input w-full" required><option value="">اختر..</option><option value="إعلان">إعلان</option><option value="اشتراكات تطبيقات">اشتراكات تطبيقات</option><option value="مصاريف أخرى">مصاريف أخرى</option></select>
-                                     </div>
-                                     <div>
-                                          <label class="block mb-1 text-sm font-medium text-gray-700">الفئة (اختياري)</label>
-                                          <input type="text" name="category" class="form-input w-full" placeholder="مثال: Facebook Ads, Google Ads..." />
                                      </div>
                                      <div>
                                           <label class="block mb-1 text-sm font-medium text-gray-700">المبلغ</label>
@@ -623,7 +516,7 @@
                                      </div>
                                      <div class="sm:col-span-2">
                                           <label class="block mb-1 text-sm font-medium text-gray-700">الوصف (اختياري)</label>
-                                          <input type="text" name="description" class="form-input w-full" placeholder="ملاحظات إضافية..." />
+                                          <input type="text" name="description" class="form-input w-full" />
                                      </div>
                                 </div>
                                 <div class="flex justify-center mt-6"><button type="submit" class="primary-btn bg-red-600 hover:bg-red-700 w-auto">إضافة المصروف</button></div>
@@ -722,22 +615,1410 @@
                    </div>
              </form>
         </div>
-        <div id="problem-modal-backdrop" class="hidden"></div>
-        <div id="problem-modal" class="bg-white main-card p-6 hidden">
-             <h3 class="text-xl font-bold mb-4">تفاصيل المشكلة</h3>
-             <div id="problem-details-content"></div>
-             <div class="flex justify-end gap-4 mt-6">
-                   <button type="button" id="close-problem-modal-btn" class="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-md">إغلاق</button>
-             </div>
-        </div>
     </main>
 
-    <!-- Dark Mode Toggle Button -->
-    <button id="dark-mode-toggle" title="تبديل الوضع الليلي/النهاري">
-        <i class="fa-solid fa-moon"></i>
-    </button>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+        import { getFirestore, doc, onSnapshot, collection, query, addDoc, deleteDoc, serverTimestamp, orderBy, updateDoc, runTransaction, writeBatch, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+        
+        const firebaseConfig = {
+            apiKey: "AIzaSyAmO9EZt_56rqEdBqxkyJW8ROZDWQ-LDAU",
+            authDomain: "subpro-v2.firebaseapp.com",
+            projectId: "subpro-v2",
+            storageBucket: "subpro-v2.appspot.com",
+            messagingSenderId: "314294327179",
+            appId: "1:314294327179:web:96e01a22aab05e500bc18e"
+        };
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
 
-    <!-- Load application JavaScript as a module -->
-    <script type="module" src="app.js"></script>
+        // Global state variables
+        let allSales = [], allExpenses = [], allAccounts = [], allProducts = [], allProblems = [];
+        let dateRangeStart = null, dateRangeEnd = null;
+        let flatpickrInstance = null;
+        let currentSalesProductFilter = 'all';
+        let currentAccountsProductFilter = 'all';
+        let currentStatusFilter = 'all'; 
+        let monthlyChart, productProfitChart, expenseTypeChart, salesBySourceChart, traderAnalysisChart;
+        const PATH_SALES = 'sales', PATH_EXPENSES = 'expenses', PATH_ACCOUNTS = 'accounts', PATH_PRODUCTS = 'products', PATH_PROBLEMS = 'problems';
+
+        // --- UTILITY & SETUP FUNCTIONS ---
+        const setupChartDefaults = () => {
+            Chart.defaults.font.family = "'Cairo', sans-serif";
+            Chart.defaults.font.weight = '600';
+            Chart.defaults.color = '#64748b';
+            Chart.defaults.plugins.tooltip.backgroundColor = '#1e293b';
+            Chart.defaults.plugins.tooltip.titleFont = { size: 14, weight: 'bold' };
+            Chart.defaults.plugins.tooltip.bodyFont = { size: 12 };
+            Chart.defaults.plugins.tooltip.padding = 10;
+            Chart.defaults.plugins.tooltip.cornerRadius = 4;
+            Chart.defaults.plugins.legend.labels.color = '#1e293b';
+            Chart.defaults.responsive = true;
+            Chart.defaults.maintainAspectRatio = false;
+        };
+        
+        const showNotification = (message, type = 'success') => {
+            const notification = document.getElementById('notification');
+            notification.textContent = message;
+            notification.className = 'show';
+            notification.classList.remove('bg-success', 'bg-danger', 'bg-info');
+            if (type === 'success') notification.classList.add('bg-success');
+            else if (type === 'danger') notification.classList.add('bg-danger');
+            else if (type === 'info') notification.classList.add('bg-info');
+            setTimeout(() => { notification.classList.remove('show'); }, 3000);
+        };
+
+        const copyToClipboard = (text) => {
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(text)
+                    .then(() => showNotification('تم النسخ بنجاح!', 'info'))
+                    .catch(() => showNotification('فشل النسخ', 'danger'));
+            } else {
+                const textArea = document.createElement('textarea');
+                textArea.value = text;
+                textArea.style.position = 'fixed';
+                textArea.style.left = '-9999px';
+                document.body.appendChild(textArea);
+                textArea.focus();
+                textArea.select();
+                try {
+                    document.execCommand('copy');
+                    showNotification('تم النسخ بنجاح!', 'info');
+                } catch (err) {
+                    showNotification('فشل النسخ', 'danger');
+                }
+                document.body.removeChild(textArea);
+            }
+        };
+
+        const calculateExpiryDate = (startDate, subscription) => {
+            if (!startDate?.seconds || !subscription || subscription === 'Lifetime') return null;
+            const expiry = new Date(startDate.seconds * 1000);
+            if (subscription.includes('Month')) {
+                const months = parseInt(subscription.match(/\d+/)?.[0] || 1);
+                expiry.setMonth(expiry.getMonth() + months);
+            } else if (subscription.includes('Year')) {
+                const years = parseInt(subscription.match(/\d+/)?.[0] || 1);
+                expiry.setFullYear(expiry.getFullYear() + years);
+            } else { return null; }
+            return expiry;
+        };
+        
+        const calculateDaysRemaining = (expiryDate) => {
+            if (!expiryDate) return null;
+            const now = new Date();
+            now.setHours(0, 0, 0, 0);
+            const expiry = new Date(expiryDate);
+            expiry.setHours(0, 0, 0, 0);
+            const diffTime = expiry.getTime() - now.getTime();
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            return diffDays;
+        };
+        
+        // --- DATA RENDERING LOGIC ---
+        const renderData = () => {
+            let salesToDisplay = [...allSales];
+            let expensesToDisplay = [...allExpenses];
+            let accountsToDisplay = [...allAccounts];
+
+            // Date filtering
+            if (dateRangeStart && dateRangeEnd) {
+                salesToDisplay = salesToDisplay.filter(s => {
+                    const saleDate = s.date?.seconds ? new Date(s.date.seconds * 1000) : null;
+                    return saleDate && saleDate >= dateRangeStart && saleDate <= dateRangeEnd;
+                });
+                 expensesToDisplay = expensesToDisplay.filter(e => {
+                    const expenseDate = e.date?.seconds ? new Date(e.date.seconds * 1000) : null;
+                    return expenseDate && expenseDate >= dateRangeStart && expenseDate <= dateRangeEnd;
+                });
+            }
+            
+            // Sales specific filters
+            if(currentSalesProductFilter !== 'all'){
+                salesToDisplay = salesToDisplay.filter(s => s.productName === currentSalesProductFilter);
+            }
+            if (currentStatusFilter === 'unconfirmed') {
+                salesToDisplay = salesToDisplay.filter(s => !s.isConfirmed);
+            }
+
+            // Accounts specific filter
+            if(currentAccountsProductFilter !== 'all'){
+                accountsToDisplay = accountsToDisplay.filter(a => a.productName === currentAccountsProductFilter);
+            }
+
+            // Update all relevant UI components
+            updateDashboard(salesToDisplay, expensesToDisplay, allSales, allProblems, allAccounts);
+            updateReports(salesToDisplay, expensesToDisplay, allAccounts);
+            updateSalesTable(salesToDisplay);
+            renderRenewalsTab(); // New function for renewals
+            updateProblemsTable(allProblems);
+            updateAccountsTable(accountsToDisplay);
+            updateExpensesTable(expensesToDisplay);
+            populateProductFilterButtons();
+        };
+
+        // --- UI UPDATE FUNCTIONS ---
+        const updateDashboard = (salesData, expensesData, allSalesData, allProblemsData, allAccountsData) => {
+            const confirmedSales = salesData.filter(sale => sale.isConfirmed);
+
+            const totalRevenue = confirmedSales.reduce((sum, sale) => sum + (sale.sellingPrice || 0), 0);
+            const totalProductCost = confirmedSales.reduce((sum, sale) => sum + (sale.costPrice || 0), 0);
+            const totalAdSpend = expensesData.filter(exp => exp.type === 'إعلان').reduce((sum, exp) => sum + (exp.amount || 0), 0);
+            const totalOtherExpenses = expensesData.filter(exp => exp.type !== 'إعلان').reduce((sum, exp) => sum + (exp.amount || 0), 0);
+            const totalExpenses = totalProductCost + totalAdSpend + totalOtherExpenses;
+            const netProfit = totalRevenue - totalExpenses;
+            const profitMargin = totalRevenue > 0 ? ((netProfit / totalRevenue) * 100).toFixed(1) : 0;
+            const roas = totalAdSpend > 0 ? (totalRevenue / totalAdSpend).toFixed(2) : '0.00';
+            
+            const totalSalesCount = confirmedSales.length;
+            const profitPerOrder = totalSalesCount > 0 ? (netProfit / totalSalesCount) : 0;
+            const totalUnconfirmedOrders = allSalesData.filter(s => !s.isConfirmed).length;
+            const totalAccountsCount = allAccountsData.length;
+            const problemRate = allSalesData.length > 0 ? ((allProblemsData.length / allSalesData.length) * 100).toFixed(1) : 0;
+
+            const now = new Date();
+            const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            const startOfWeek = new Date(now);
+            startOfWeek.setDate(now.getDate() - now.getDay() + (now.getDay() === 0 ? -6 : 1));
+            startOfWeek.setHours(0,0,0,0);
+            const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+            const dailySalesCount = allSalesData.filter(s => (s.date?.seconds * 1000) >= startOfDay.getTime()).length;
+            const weeklySalesCount = allSalesData.filter(s => (s.date?.seconds * 1000) >= startOfWeek.getTime()).length;
+            const monthlySalesCount = allSalesData.filter(s => (s.date?.seconds * 1000) >= startOfMonth.getTime()).length;
+
+            const prevMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+            const startOfPrevMonth = new Date(prevMonthDate.getFullYear(), prevMonthDate.getMonth(), 1);
+            const endOfPrevMonth = new Date(now.getFullYear(), now.getMonth(), 0);
+            endOfPrevMonth.setHours(23,59,59,999);
+            
+            const prevMonthSales = allSalesData.filter(s => s.isConfirmed && (s.date?.seconds * 1000) >= startOfPrevMonth.getTime() && (s.date?.seconds * 1000) <= endOfPrevMonth.getTime());
+            const prevMonthExpenses = allExpenses.filter(e => (e.date?.seconds * 1000) >= startOfPrevMonth.getTime() && (e.date?.seconds * 1000) <= endOfPrevMonth.getTime());
+            const prevMonthRevenue = prevMonthSales.reduce((sum, s) => sum + (s.sellingPrice || 0), 0);
+            const prevMonthCost = prevMonthSales.reduce((sum, s) => sum + (s.costPrice || 0), 0) + prevMonthExpenses.reduce((sum, e) => sum + (e.amount || 0), 0);
+            const prevMonthNetProfit = prevMonthRevenue - prevMonthCost;
+            
+            let monthlyGrowth = 0;
+            if (prevMonthNetProfit !== 0) {
+                 monthlyGrowth = ((netProfit - prevMonthNetProfit) / Math.abs(prevMonthNetProfit) * 100);
+            } else if (netProfit > 0) {
+                monthlyGrowth = 100;
+            }
+            const growthIcon = monthlyGrowth >= 0 ? 'fa-arrow-trend-up text-green-300' : 'fa-arrow-trend-down text-red-300';
+            const profitGradient = netProfit >= 0 ? 'from-green-400 to-emerald-500' : 'from-red-400 to-rose-500';
+            
+            document.getElementById('dashboard-content').innerHTML = `
+                <!-- Row 1: Main Stats -->
+                <div class="col-span-12 lg:col-span-6 stat-card bg-gradient-to-br ${profitGradient}">
+                    <p class="font-bold text-lg text-white/90">الربح الصافي</p>
+                    <p class="text-xs text-white/70">Net Profit</p>
+                    <p class="text-5xl font-extrabold mt-2">EGP ${netProfit.toFixed(2)}</p>
+                </div>
+                <div class="col-span-12 lg:col-span-6 stat-card bg-gradient-to-br from-indigo-500 to-purple-500">
+                    <p class="font-bold text-lg text-white/90">إجمالي الدخل</p>
+                    <p class="text-xs text-white/70">Total Revenue</p>
+                    <p class="text-5xl font-extrabold mt-2">EGP ${totalRevenue.toFixed(2)}</p>
+                </div>
+
+                <!-- Row 2 -->
+                <div class="col-span-12 md:col-span-6 lg:col-span-4 stat-card bg-gradient-to-br from-teal-500 to-cyan-500">
+                    <p class="font-semibold text-white/90">Profit per Order</p>
+                    <p class="text-xs text-white/70">متوسط الربح لكل أوردر</p>
+                    <p class="text-3xl font-bold mt-2">EGP ${profitPerOrder.toFixed(2)}</p>
+                </div>
+                <div class="col-span-12 md:col-span-6 lg:col-span-4 stat-card bg-gradient-to-br from-yellow-500 to-orange-500">
+                    <p class="font-semibold text-white/90">هامش الربح</p>
+                    <p class="text-xs text-white/70">Profit Margin</p>
+                    <p class="text-3xl font-bold mt-2">${profitMargin}%</p>
+                </div>
+                 <div class="col-span-12 md:col-span-6 lg:col-span-4 stat-card bg-gradient-to-br from-purple-500 to-pink-500">
+                    <p class="font-semibold text-white/90">العائد على الإعلانات</p>
+                    <p class="text-xs text-white/70">ROAS</p>
+                    <p class="text-3xl font-bold mt-2">${roas}x</p>
+                </div>
+
+                <!-- Row 3 -->
+                <div class="col-span-12 md:col-span-6 lg:col-span-4 stat-card bg-gradient-to-br from-green-500 to-lime-500">
+                    <p class="font-semibold text-white/90">الأوردرات المؤكدة</p>
+                    <p class="text-xs text-white/70">Confirmed Orders</p>
+                    <p class="text-3xl font-bold mt-2">${totalSalesCount}</p>
+                </div>
+                <div class="col-span-12 md:col-span-6 lg:col-span-4 stat-card bg-gradient-to-br from-amber-500 to-yellow-600">
+                    <p class="font-semibold text-white/90">الأوردرات غير المؤكدة</p>
+                    <p class="text-xs text-white/70">Unconfirmed Orders</p>
+                    <p class="text-3xl font-bold mt-2">${totalUnconfirmedOrders}</p>
+                </div>
+                <div class="col-span-12 md:col-span-6 lg:col-span-4 stat-card bg-gradient-to-br from-blue-500 to-teal-500">
+                    <p class="font-semibold text-white/90">إجمالي الأكونتات</p>
+                    <p class="text-xs text-white/70">Total Accounts</p>
+                    <p class="text-3xl font-bold mt-2">${totalAccountsCount}</p>
+                </div>
+                
+                <!-- Row 4 -->
+                <div class="col-span-12 md:col-span-6 lg:col-span-4 stat-card bg-gradient-to-br from-red-500 to-rose-500">
+                    <p class="font-semibold text-white/90">إجمالي المصروفات</p>
+                    <p class="text-xs text-white/70">Total Expenses</p>
+                    <p class="text-3xl font-bold mt-2">EGP ${totalExpenses.toFixed(2)}</p>
+                </div>
+                <div class="col-span-12 md:col-span-6 lg:col-span-4 stat-card bg-gradient-to-br from-sky-500 to-cyan-500">
+                    <p class="font-semibold text-white/90">مصاريف الإعلانات</p>
+                    <p class="text-xs text-white/70">Ad Spend</p>
+                    <p class="text-3xl font-bold mt-2">EGP ${totalAdSpend.toFixed(2)}</p>
+                </div>
+                <div class="col-span-12 md:col-span-6 lg:col-span-4 stat-card bg-gradient-to-br from-indigo-500 to-purple-600">
+                    <p class="font-semibold text-white/90">معدل المشاكل</p>
+                    <p class="text-xs text-white/70">Problem Rate</p>
+                    <p class="text-3xl font-bold mt-2">${problemRate}%</p>
+                </div>
+                
+                <!-- Row 5 -->
+                <div class="col-span-12 md:col-span-6 lg:col-span-4 stat-card bg-gradient-to-br from-orange-400 to-amber-500">
+                    <p class="font-semibold text-white/90">مبيعات اليوم</p>
+                    <p class="text-xs text-white/70">Daily Sales</p>
+                    <p class="text-3xl font-bold mt-2">${dailySalesCount}</p>
+                </div>
+                <div class="col-span-12 md:col-span-6 lg:col-span-4 stat-card bg-gradient-to-br from-orange-400 to-amber-500">
+                    <p class="font-semibold text-white/90">مبيعات الأسبوع</p>
+                    <p class="text-xs text-white/70">Weekly Sales</p>
+                    <p class="text-3xl font-bold mt-2">${weeklySalesCount}</p>
+                </div>
+                <div class="col-span-12 md:col-span-6 lg:col-span-4 stat-card bg-gradient-to-br from-orange-400 to-amber-500">
+                    <p class="font-semibold text-white/90">مبيعات الشهر</p>
+                    <p class="text-xs text-white/70">Monthly Sales</p>
+                    <p class="text-3xl font-bold mt-2">${monthlySalesCount}</p>
+                </div>
+            `;
+        };
+        
+        const updateSalesTable = (salesData) => {
+            const salesContainer = document.getElementById('sales-list-container');
+            salesContainer.innerHTML = '';
+            const bulkActionsContainer = document.getElementById('bulk-actions-container');
+            
+            const unconfirmedCount = allSales.filter(s => !s.isConfirmed).length;
+            const unconfirmedBtn = document.querySelector('#sales-status-filter-container button[data-status="unconfirmed"]');
+            if (unconfirmedBtn) {
+                unconfirmedBtn.innerHTML = `<i class="fa-solid fa-hourglass-half mr-1"></i> غير مؤكد <span class="bg-yellow-200 text-yellow-800 text-xs font-semibold mr-2 px-2.5 py-0.5 rounded-full">${unconfirmedCount}</span>`;
+            }
+
+            if (salesData.length === 0) {
+                salesContainer.innerHTML = `<p class="text-center py-10 text-gray-500">لا توجد مبيعات لعرضها.</p>`;
+                bulkActionsContainer.classList.add('hidden');
+                return;
+            }
+
+            const unconfirmedSalesExist = salesData.some(sale => !sale.isConfirmed);
+            if (unconfirmedSalesExist) {
+                bulkActionsContainer.classList.remove('hidden');
+                document.getElementById('select-all-checkbox').checked = false;
+                document.getElementById('bulk-confirm-count').textContent = '0';
+                document.getElementById('bulk-confirm-btn').classList.add('opacity-50', 'cursor-not-allowed');
+            } else {
+                bulkActionsContainer.classList.add('hidden');
+            }
+            
+            const fullSalesList = [...allSales].sort((a,b) => (b.date?.seconds || 0) - (a.date?.seconds || 0));
+            const groupedSales = salesData.sort((a,b) => (b.date?.seconds || 0) - (a.date?.seconds || 0)).reduce((acc, sale) => {
+                const dateString = new Date(sale.date?.seconds * 1000).toLocaleDateString('ar-EG-u-nu-latn', { year: 'numeric', month: 'long', day: 'numeric' });
+                if (!acc[dateString]) acc[dateString] = [];
+                acc[dateString].push(sale);
+                return acc;
+            }, {});
+
+            const today = new Date().toLocaleDateString('ar-EG-u-nu-latn', { year: 'numeric', month: 'long', day: 'numeric' });
+            const yesterday = new Date(Date.now() - 86400000).toLocaleDateString('ar-EG-u-nu-latn', { year: 'numeric', month: 'long', day: 'numeric' });
+            for (const dateString in groupedSales) {
+                let displayDate = dateString;
+                if (dateString === today) displayDate = 'اليوم';
+                else if (dateString === yesterday) displayDate = 'الأمس';
+                const dateSeparator = document.createElement('div');
+                dateSeparator.className = 'date-separator';
+                dateSeparator.innerHTML = `<span>${displayDate}</span>`;
+                salesContainer.appendChild(dateSeparator);
+                groupedSales[dateString].forEach(sale => {
+                    const orderIndex = fullSalesList.findIndex(s => s.id === sale.id);
+                    const orderNumber = fullSalesList.length - orderIndex;
+                    const sellingPrice = sale.sellingPrice || 0;
+                    const costPrice = sale.costPrice || 0;
+                    const profit = sellingPrice - costPrice;
+                    const expiryDate = calculateExpiryDate(sale.date, sale.subscription);
+                    const daysRemaining = calculateDaysRemaining(expiryDate);
+                    const saleDate = sale.date?.seconds ? new Date(sale.date.seconds * 1000).toLocaleString('ar-EG', { dateStyle: 'short', timeStyle: 'short' }) : '-';
+
+                    let status = { text: '-', bgColor: 'bg-gray-100', textColor: 'text-gray-800' };
+                    if (sale.subscription === 'Lifetime') { status = { text: 'مدى الحياة', bgColor: 'bg-sky-100', textColor: 'text-sky-800' }; }
+                    else if (expiryDate) {
+                        if (new Date() > expiryDate) { status = { text: 'منتهي', bgColor: 'bg-red-100', textColor: 'text-red-800' }; }
+                        else { status = { text: 'ساري', bgColor: 'bg-green-100', textColor: 'text-green-800' }; }
+                    }
+
+                    const confirmationStatus = sale.isConfirmed 
+                        ? { text: 'مؤكد', bgColor: 'bg-green-100', textColor: 'text-green-800' }
+                        : { text: 'غير مؤكد', bgColor: 'bg-yellow-100', textColor: 'text-yellow-800' };
+                    
+                    const actionButtonHTML = !sale.isConfirmed
+                        ? `<button data-id="${sale.id}" class="confirm-sale-btn confirm-btn text-sm">تأكيد <i class="fa-solid fa-check ml-1"></i></button>`
+                        : '';
+                    
+                    const checkboxHTML = !sale.isConfirmed
+                        ? `<input type="checkbox" data-id="${sale.id}" class="sale-checkbox h-5 w-5 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500 cursor-pointer">`
+                        : `<div class="w-5 h-5"></div>`;
+                        
+                    let daysRemainingText = '-';
+                    let daysRemainingColor = 'text-gray-800';
+                    if (daysRemaining !== null && sale.subscription !== 'Lifetime') {
+                        if (daysRemaining < 0) {
+                            daysRemainingText = 'منتهي';
+                            daysRemainingColor = 'text-red-600 font-bold';
+                        } else if (daysRemaining <= 7) {
+                            daysRemainingText = `${daysRemaining} يوم`;
+                            daysRemainingColor = 'text-yellow-600 font-bold';
+                        } else {
+                            daysRemainingText = `${daysRemaining} يوم`;
+                            daysRemainingColor = 'text-green-600';
+                        }
+                    }
+
+                    const card = document.createElement('div');
+                    card.className = 'main-card mb-4 border border-gray-200';
+                    card.dataset.saleId = sale.id;
+                    card.innerHTML = `
+                        <div class="flex items-center justify-between gap-4 p-4 border-b border-gray-200">
+                            <div class="flex items-center gap-3 flex-wrap">
+                                <span class="text-sm font-bold text-gray-400">#${orderNumber}</span>
+                                <span class="px-2 py-1 text-xs font-semibold rounded-full ${confirmationStatus.bgColor} ${confirmationStatus.textColor}">${confirmationStatus.text}</span>
+                                <span class="px-2 py-1 text-xs font-semibold rounded-full ${status.bgColor} ${status.textColor}">${status.text}</span>
+                                <span class="text-sm font-medium text-gray-500">${saleDate}</span>
+                            </div>
+                            <div class="flex items-center gap-3">
+                                ${checkboxHTML}
+                                ${actionButtonHTML}
+                            </div>
+                        </div>
+
+                        <div class="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6">
+                            <div class="profit-card-sale">
+                                <i class="fa-regular fa-user text-xl text-gray-400 mb-2"></i>
+                                <h4 class="font-semibold text-gray-500">العميل</h4>
+                                <p class="text-lg font-bold text-gray-800 copyable cursor-pointer" data-copy-text="${sale.contactInfo || ''}">${sale.contactInfo || '-'}</p>
+                            </div>
+                            <div class="profit-card-sale">
+                                <i class="fa-solid fa-at text-xl text-gray-400 mb-2"></i>
+                                <h4 class="font-semibold text-gray-500">بيانات الحساب</h4>
+                                <p class="text-lg font-bold text-gray-800 copyable cursor-pointer break-all" data-copy-text="${sale.customerEmail || ''}">${sale.customerEmail || '-'}</p>
+                                <p class="text-sm font-semibold text-gray-600 copyable cursor-pointer mt-1" data-copy-text="${sale.password || ''}">Pass: ${sale.password || '(غير مسجل)'}</p>
+                            </div>
+                            <div class="profit-card-sale">
+                                <i class="fa-solid fa-id-card-clip text-xl text-gray-400 mb-2"></i>
+                                <h4 class="font-semibold text-gray-500">نوع الحساب</h4>
+                                <p class="text-lg font-bold text-gray-800">${sale.accountType || '-'}</p>
+                            </div>
+                            <div class="profit-card-sale">
+                                <i class="fa-solid fa-cubes text-xl text-gray-400 mb-2"></i>
+                                <h4 class="font-semibold text-gray-500">المنتج</h4>
+                                <p class="text-lg font-bold text-gray-800">${sale.productName || '-'}</p>
+                            </div>
+                            <div class="profit-card-sale">
+                                <i class="fa-solid fa-calendar-alt text-xl text-gray-400 mb-2"></i>
+                                <h4 class="font-semibold text-gray-500">الاشتراك</h4>
+                                 <p class="text-lg font-bold text-gray-800">${sale.subscription || '-'}</p>
+                                <p class="text-sm text-gray-600 mt-1">
+                                    ${expiryDate ? expiryDate.toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' }) : 'مدى الحياة'}
+                                </p>
+                            </div>
+                             <div class="profit-card-sale">
+                                <i class="fa-solid fa-hourglass-half text-xl text-gray-400 mb-2"></i>
+                                <h4 class="font-semibold text-gray-500">الأيام المتبقية</h4>
+                                <p class="text-lg ${daysRemainingColor}">
+                                    ${daysRemainingText}
+                                </p>
+                            </div>
+                        </div>
+
+                        <div class="p-4 flex flex-wrap justify-center items-center gap-6 border-t border-gray-200 mt-4">
+                            <div class="text-center">
+                                <span class="text-sm text-gray-500">سعر البيع</span>
+                                <p class="text-2xl font-extrabold text-gray-800">${sellingPrice.toFixed(2)} EGP</p>
+                            </div>
+                            <div class="text-center">
+                                <span class="text-sm text-gray-500">التكلفة</span>
+                                <p class="text-2xl font-extrabold text-gray-800">${costPrice.toFixed(2)} EGP</p>
+                            </div>
+                            <div class="text-center">
+                                <span class="text-sm text-gray-500">الربح الصافي</span>
+                                <p class="text-2xl font-extrabold ${profit >= 0 ? 'text-green-600' : 'text-red-600'}">${profit.toFixed(2)} EGP</p>
+                            </div>
+                            <div class="flex gap-4 items-center">
+                                <button data-id="${sale.id}" class="edit-sale-btn text-blue-500 hover:text-blue-700 font-semibold text-sm">
+                                    <i class="fa-solid fa-edit ml-1"></i>تعديل
+                                </button>
+                                <button data-id="${sale.id}" class="delete-sale-btn text-red-500 hover:text-red-700 font-semibold text-sm">
+                                    <i class="fa-solid fa-trash ml-1"></i>حذف
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                    salesContainer.appendChild(card);
+                });
+            }
+        };
+
+        const renderRenewalsTab = () => {
+            const container = document.getElementById('renewals-list-container');
+            const countBadge = document.getElementById('renewals-count');
+            
+            const renewalCandidates = allSales.filter(sale => {
+                if (!sale.isConfirmed || sale.subscription === 'Lifetime' || sale.renewalStatus === 'renewed' || sale.renewalStatus === 'not-renewed') {
+                    return false;
+                }
+                const expiryDate = calculateExpiryDate(sale.date, sale.subscription);
+                if (!expiryDate) return false;
+
+                const daysRemaining = calculateDaysRemaining(expiryDate);
+                return daysRemaining <= 7;
+            }).sort((a, b) => {
+                const expiryA = calculateExpiryDate(a.date, a.subscription);
+                const expiryB = calculateExpiryDate(b.date, b.subscription);
+                return expiryA - expiryB;
+            });
+
+            if (renewalCandidates.length > 0) {
+                countBadge.textContent = renewalCandidates.length;
+                countBadge.classList.remove('hidden');
+            } else {
+                countBadge.classList.add('hidden');
+            }
+
+            if (renewalCandidates.length === 0) {
+                container.innerHTML = `<p class="text-center py-10 text-gray-500">لا توجد اشتراكات تحتاج إلى تنبيه بالتجديد حاليًا.</p>`;
+                return;
+            }
+
+            container.innerHTML = renewalCandidates.map(sale => {
+                const expiryDate = calculateExpiryDate(sale.date, sale.subscription);
+                const daysRemaining = calculateDaysRemaining(expiryDate);
+                const statusText = daysRemaining < 0 ? `منتهي منذ ${Math.abs(daysRemaining)} يوم` : `متبقي ${daysRemaining} يوم`;
+                
+                let statusColor = 'text-gray-800';
+                if (daysRemaining <= 0) statusColor = 'text-red-600';
+                else if (daysRemaining <= 7) statusColor = 'text-yellow-600';
+                
+                let renewalStatusHTML = '';
+                if(sale.renewalStatus === 'alerted'){
+                    renewalStatusHTML = `<span class="px-3 py-1 text-sm font-semibold rounded-full bg-blue-100 text-blue-800"><i class="fa-solid fa-check-double ml-2"></i>تم التنبيه</span>`;
+                }
+
+                return `
+                    <div class="main-card mb-4">
+                        <div class="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-center">
+                             <div>
+                                <h4 class="text-sm text-gray-500">العميل</h4>
+                                <p class="font-bold text-lg copyable cursor-pointer" data-copy-text="${sale.contactInfo || ''}">${sale.contactInfo || '-'}</p>
+                            </div>
+                            <div>
+                                <h4 class="text-sm text-gray-500">الإيميل</h4>
+                                <p class="font-bold text-lg copyable cursor-pointer break-all" data-copy-text="${sale.customerEmail || ''}">${sale.customerEmail || '-'}</p>
+                            </div>
+                             <div>
+                                <h4 class="text-sm text-gray-500">المنتج</h4>
+                                <p class="font-semibold text-gray-700">${sale.productName}</p>
+                            </div>
+                            <div>
+                                <h4 class="text-sm text-gray-500">حالة الاشتراك</h4>
+                                <p class="font-bold ${statusColor}">${statusText}</p>
+                            </div>
+                        </div>
+                        <div class="bg-gray-50 p-3 flex flex-wrap justify-end items-center gap-3">
+                            ${renewalStatusHTML}
+                            <button data-id="${sale.id}" data-action="alerted" class="renewal-action-btn text-sm font-semibold py-1 px-3 rounded-full bg-blue-500 hover:bg-blue-600 text-white transition-colors">
+                                <i class="fa-solid fa-bell ml-1"></i> تم التنبيه
+                            </button>
+                            <button data-id="${sale.id}" data-action="renewed" class="renewal-action-btn text-sm font-semibold py-1 px-3 rounded-full bg-green-500 hover:bg-green-600 text-white transition-colors">
+                                <i class="fa-solid fa-arrows-rotate ml-1"></i> جدد
+                            </button>
+                            <button data-id="${sale.id}" data-action="not-renewed" class="renewal-action-btn text-sm font-semibold py-1 px-3 rounded-full bg-red-500 hover:bg-red-600 text-white transition-colors">
+                                <i class="fa-solid fa-xmark ml-1"></i> لم يجدد
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        };
+
+        const updateProblemsTable = (problemsData) => {
+            const problemsContainer = document.getElementById('problems-list-container');
+            problemsContainer.innerHTML = '';
+            if (problemsData.length === 0) {
+                problemsContainer.innerHTML = `<p class="text-center py-10 text-gray-500">لا توجد مشاكل مُسجلة حاليًا.</p>`;
+                return;
+            }
+            
+            problemsData.forEach(problem => {
+                const originalSale = allSales.find(sale => sale.id === problem.saleId) || {};
+                const problemDate = problem.date?.seconds ? new Date(problem.date.seconds * 1000).toLocaleString('ar-EG', { dateStyle: 'short', timeStyle: 'short' }) : '-';
+                
+                const originalAccount = allAccounts.find(acc => acc.id === problem.originalAccountId) || {};
+                const replacementAccount = allAccounts.find(acc => acc.id === problem.replacementAccountId) || {};
+                
+                const card = document.createElement('div');
+                card.className = 'main-card mb-4 p-4 border border-gray-200';
+                card.innerHTML = `
+                    <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-2 mb-4">
+                        <div>
+                            <p class="text-sm font-medium text-gray-500">مشكلة بتاريخ: ${problemDate}</p>
+                            <p class="text-lg font-bold text-gray-800 mt-1">العميل: ${originalSale.contactInfo || '-'}</p>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        <div class="profit-card-sale">
+                            <i class="fa-solid fa-bug text-xl text-gray-400 mb-2"></i>
+                            <h4 class="font-semibold text-gray-500">الأكونت الأصلي (المشكلة)</h4>
+                            <p class="text-lg font-bold text-gray-800 copyable cursor-pointer" data-copy-text="${originalAccount.email || ''}">${originalAccount.email || '-'}</p>
+                        </div>
+                        <div class="profit-card-sale">
+                            <i class="fa-solid fa-comment-dots text-xl text-gray-400 mb-2"></i>
+                            <h4 class="font-semibold text-gray-500">التفاصيل</h4>
+                            <p class="text-sm font-medium text-gray-800">${problem.description || '-'}</p>
+                        </div>
+                        <div class="profit-card-sale">
+                            <i class="fa-solid fa-arrows-rotate text-xl text-gray-400 mb-2"></i>
+                            <h4 class="font-semibold text-gray-500">الأكونت البديل</h4>
+                            <p class="text-lg font-bold text-gray-800 copyable cursor-pointer" data-copy-text="${replacementAccount.email || ''}">${replacementAccount.email || '-'}</p>
+                        </div>
+                    </div>
+                `;
+                problemsContainer.appendChild(card);
+            });
+        };
+
+        const updateAccountsTable = (accountsData) => {
+             const table = document.getElementById('accounts-table');
+             table.innerHTML = ''; 
+             if (accountsData.length === 0) { table.innerHTML = `<tbody><tr><td colspan="8" class="text-center py-10 text-gray-500">لا توجد أكونتات لعرضها.</td></tr></tbody>`; return; }
+             const thead = document.createElement('thead');
+             thead.className = 'bg-gray-100';
+             thead.innerHTML = `<tr><th class="px-3 py-3 text-right text-xs font-bold text-gray-600 uppercase">تاريخ الشراء</th><th class="px-3 py-3 text-right text-xs font-bold text-gray-600 uppercase">الإيميل</th><th class="px-3 py-3 text-right text-xs font-bold text-gray-600 uppercase">المنتج</th><th class="px-3 py-3 text-right text-xs font-bold text-gray-600 uppercase">التاجر</th><th class="px-3 py-3 text-right text-xs font-bold text-gray-600 uppercase">التكلفة</th><th class="px-3 py-3 text-right text-xs font-bold text-gray-600 uppercase">الاستخدام</th><th class="px-3 py-3 text-right text-xs font-bold text-gray-600 uppercase">الحالة</th><th class="px-3 py-3"></th></tr>`;
+             table.appendChild(thead);
+             const tbody = document.createElement('tbody');
+             tbody.className = 'bg-white divide-y divide-gray-200';
+             accountsData.forEach(acc => {
+                 const row = document.createElement('tr');
+                 let statusHTML, usageDisplayHTML;
+                 if (!acc.is_active) { statusHTML = `<div class="flex items-center"><span class="h-2 w-2 ml-2 rounded-full bg-red-500"></span><span>غير نشط</span></div>`; }
+                 else if (acc.current_uses >= acc.allowed_uses && acc.allowed_uses !== Infinity) { statusHTML = `<div class="flex items-center"><span class="h-2 w-2 ml-2 rounded-full bg-green-500"></span><span>مكتمل</span></div>`; }
+                 else if (acc.current_uses > 0) { statusHTML = `<div class="flex items-center"><span class="h-2 w-2 ml-2 rounded-full bg-yellow-500"></span><span>مستخدم</span></div>`; }
+                 else { statusHTML = `<div class="flex items-center"><span class="h-2 w-2 ml-2 rounded-full bg-sky-500"></span><span>جديد</span></div>`; }
+                 if (acc.allowed_uses === Infinity) { usageDisplayHTML = `<span class="font-semibold">${acc.current_uses} / ∞</span>`; }
+                 else if (acc.allowed_uses > 0) {
+                     const percentage = Math.min(100, Math.round((acc.current_uses / acc.allowed_uses) * 100));
+                     let barColor = percentage >= 100 ? 'bg-green-500' : (percentage === 0 ? 'bg-sky-500' : 'bg-yellow-500');
+                     usageDisplayHTML = `<div class="flex items-center w-full"><span class="text-sm font-medium text-gray-700 ml-3 w-16">${acc.current_uses} / ${acc.allowed_uses}</span><div class="w-full bg-gray-200 rounded-full h-2.5"><div class="${barColor} h-2.5 rounded-full" style="width: ${percentage}%"></div></div><span class="text-sm font-medium text-gray-700 mr-2 w-10 text-left">${percentage}%</span></div>`;
+                 } else { usageDisplayHTML = '<span>-</span>'; }
+                 const purchaseDate = acc.purchase_date?.seconds ? new Date(acc.purchase_date.seconds * 1000).toLocaleDateString('ar-EG') : 'غير محدد';
+                 row.innerHTML = `<td data-label="تاريخ الشراء" class="text-gray-600">${purchaseDate}</td><td data-label="الإيميل" class="font-bold text-gray-800">${acc.email}</td><td data-label="المنتج" class="text-gray-800">${acc.productName || '-'}</td><td data-label="التاجر" class="text-gray-600">${acc.trader_name}</td><td data-label="التكلفة" class="font-semibold text-gray-700">${(acc.purchase_price || 0).toFixed(2)}</td><td data-label="الاستخدام">${usageDisplayHTML}</td><td data-label="الحالة">${statusHTML}</td><td data-label="إجراءات"><div class="flex gap-4 justify-end"><button data-id="${acc.id}" class="edit-account-btn text-blue-500 hover:text-blue-700 font-semibold">تعديل</button><button data-id="${acc.id}" class="delete-account-btn text-red-500 hover:text-red-700 font-semibold">حذف</button></div></td>`;
+                 tbody.appendChild(row);
+             });
+             table.appendChild(tbody);
+        };
+
+        const updateExpensesTable = (expensesData) => {
+             const table = document.getElementById('expenses-table');
+             table.innerHTML = ''; 
+             const thead = document.createElement('thead');
+             thead.className = 'bg-gray-50';
+             thead.innerHTML = `<tr><th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">التاريخ</th><th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">النوع</th><th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">الوصف</th><th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">المبلغ</th><th class="px-4 py-2"></th></tr>`;
+             table.appendChild(thead);
+             const tbody = document.createElement('tbody');
+             tbody.className = 'bg-white';
+             if (expensesData.length === 0) { tbody.innerHTML = `<tr><td colspan="5" class="text-center py-10 text-gray-500">لا توجد مصروفات لعرضها.</td></tr>`; }
+             else {
+                 const typeStyles = { 'إعلان': { icon: 'fa-solid fa-bullhorn', color: 'bg-red-100 text-red-800' }, 'اشتراكات تطبيقات': { icon: 'fa-solid fa-credit-card', color: 'bg-blue-100 text-blue-800' }, 'مصاريف أخرى': { icon: 'fa-solid fa-receipt', color: 'bg-yellow-100 text-yellow-800' } };
+                  expensesData.forEach(expense => {
+                      const row = document.createElement('tr');
+                      const style = typeStyles[expense.type] || typeStyles['مصاريف أخرى'];
+                      row.innerHTML = `<td data-label="التاريخ" class="px-4 py-3 text-gray-600">${new Date(expense.date?.seconds * 1000).toLocaleDateString('ar-EG')}</td><td data-label="النوع" class="px-4 py-3"><span class="px-3 py-1 inline-flex text-sm leading-5 font-semibold rounded-full ${style.color}"><i class="${style.icon} ml-2"></i>${expense.type}</span></td><td data-label="الوصف" class="px-4 py-3 text-gray-600">${expense.description || '-'}</td><td data-label="المبلغ" class="px-4 py-3 font-semibold text-gray-900">${(expense.amount || 0).toFixed(2)}</td><td data-label="إجراءات" class="px-4 py-3 text-left"><div class="flex gap-2"><button data-id="${expense.id}" class="edit-expense-btn text-blue-500 hover:text-blue-700 font-semibold">تعديل</button><button data-id="${expense.id}" class="delete-expense-btn text-red-500 hover:text-red-700 font-semibold">حذف</button></div></td>`;
+                      tbody.appendChild(row);
+                  });
+             }
+             table.appendChild(tbody);
+             const tfoot = document.createElement('tfoot');
+             tfoot.className = 'bg-gray-50';
+             const totalExpenses = expensesData.reduce((sum, exp) => sum + (exp.amount || 0), 0);
+             tfoot.innerHTML = `<tr class="border-t-2 border-gray-200"><td colspan="3" class="px-4 py-2 text-right font-bold text-gray-800">الإجمالي</td><td id="expenses-total" class="px-4 py-2 font-bold text-gray-800">EGP ${totalExpenses.toFixed(2)}</td><td></td></tr>`;
+             table.appendChild(tfoot);
+        };
+        
+        const updateReports = (salesData, expensesData, accountsData) => {
+            const confirmedSales = salesData.filter(s => s.isConfirmed);
+            const monthlyData = {};
+            const processEntry = (date, amount, type) => {
+                if (!date || !date.seconds) return;
+                const month = new Date(date.seconds * 1000).toISOString().slice(0, 7);
+                if (!monthlyData[month]) {
+                    monthlyData[month] = { revenue: 0, expenses: 0, profit: 0 };
+                }
+                if(type === 'revenue') monthlyData[month].revenue += amount;
+                else if (type === 'expense') monthlyData[month].expenses += amount;
+            };
+            confirmedSales.forEach(s => processEntry(s.date, s.sellingPrice, 'revenue'));
+            expensesData.forEach(e => processEntry(e.date, e.amount, 'expense'));
+            confirmedSales.forEach(s => processEntry(s.date, s.costPrice, 'expense'));
+            Object.keys(monthlyData).forEach(month => {
+                monthlyData[month].profit = monthlyData[month].revenue - monthlyData[month].expenses;
+            });
+            const sortedMonths = Object.keys(monthlyData).sort();
+            const monthlyLabels = sortedMonths.map(m => new Date(m + '-02').toLocaleString('ar-EG', {month: 'long', year: 'numeric'}));
+            const monthlyRevenue = sortedMonths.map(m => monthlyData[m].revenue);
+            const monthlyExpenses = sortedMonths.map(m => monthlyData[m].expenses);
+            const monthlyProfit = sortedMonths.map(m => monthlyData[m].profit);
+            renderMonthlyChart(monthlyLabels, monthlyRevenue, monthlyExpenses, monthlyProfit);
+            const productProfit = confirmedSales.reduce((acc, sale) => {
+                const profit = sale.sellingPrice - sale.costPrice;
+                const name = sale.productName || 'غير محدد';
+                acc[name] = (acc[name] || 0) + profit;
+                return acc;
+            }, {});
+            const sortedProducts = Object.entries(productProfit).sort((a,b) => b[1] - a[1]);
+            const productLabels = sortedProducts.map(p => p[0]);
+            const productProfits = sortedProducts.map(p => p[1]);
+            document.getElementById('profit-by-product-title').textContent = `المنتجات الأكثر ربحية (الإجمالي: ${productProfits.reduce((a,b) => a+b, 0).toFixed(2)} EGP)`;
+            renderProductProfitChart(productLabels, productProfits);
+            const expenseByType = expensesData.reduce((acc, exp) => {
+                acc[exp.type] = (acc[exp.type] || 0) + exp.amount;
+                return acc;
+            }, {});
+            const expenseLabels = Object.keys(expenseByType);
+            const expenseAmounts = Object.values(expenseByType);
+            document.getElementById('expenses-by-type-title').textContent = `توزيع المصروفات (الإجمالي: ${expenseAmounts.reduce((a,b) => a+b, 0).toFixed(2)} EGP)`;
+            renderExpenseTypeChart(expenseLabels, expenseAmounts);
+            const salesBySource = confirmedSales.reduce((acc, sale) => {
+                const source = sale.contactMethod || 'غير محدد';
+                if (!acc[source]) acc[source] = 0;
+                acc[source] += sale.sellingPrice;
+                return acc;
+            }, {});
+            const sourceLabels = Object.keys(salesBySource);
+            const sourceRevenues = Object.values(salesBySource);
+            document.getElementById('sales-by-source-title').textContent = `تحليل المبيعات حسب المصدر (الإجمالي: ${sourceRevenues.reduce((a,b) => a+b, 0).toFixed(2)} EGP)`;
+            renderSalesBySourceChart(sourceLabels, sourceRevenues);
+            const traderAnalysis = accountsData.reduce((acc, account) => {
+                const trader = account.trader_name || 'غير محدد';
+                if (!acc[trader]) acc[trader] = 0;
+                acc[trader] += account.purchase_price || 0;
+                return acc;
+            }, {});
+            const sortedTraders = Object.entries(traderAnalysis).sort((a, b) => b[1] - a[1]);
+            const traderLabels = sortedTraders.map(t => t[0]);
+            const traderCosts = sortedTraders.map(t => t[1]);
+            document.getElementById('trader-analysis-title').textContent = `تحليل تكلفة التجار (الإجمالي: ${traderCosts.reduce((a,b) => a+b, 0).toFixed(2)} EGP)`;
+            renderTraderAnalysisChart(traderLabels, traderCosts);
+        };
+        
+        const renderMonthlyChart=(l,r,e,p)=>{const t=document.getElementById("monthly-performance-chart").getContext("2d");monthlyChart&&monthlyChart.destroy(),monthlyChart=new Chart(t,{type:"line",data:{labels:l,datasets:[{label:"الدخل",data:r,borderColor:"#4f46e5",backgroundColor:"rgba(79, 70, 229, 0.1)",fill:!0,tension:.4},{label:"المصروفات",data:e,borderColor:"#ef4444",backgroundColor:"rgba(239, 68, 68, 0.1)",fill:!0,tension:.4},{label:"الربح",data:p,borderColor:"#22c55e",backgroundColor:"rgba(34, 197, 94, 0.1)",fill:!0,tension:.4}]},options:{scales:{y:{ticks:{color:"#64748b"},grid:{color:"#e2e8f0",borderDash:[5,5]}},x:{ticks:{color:"#64748b"},grid:{display:!1}}}}})};const renderProductProfitChart=(l,d)=>{const t=document.getElementById("profit-by-product-chart").getContext("2d");productProfitChart&&productProfitChart.destroy();const e=d.map(()=>`rgba(${Math.floor(255*Math.random())}, ${Math.floor(255*Math.random())}, ${Math.floor(255*Math.random())}, 0.8)`);productProfitChart=new Chart(t,{type:"bar",data:{labels:l,datasets:[{label:"الربح",data:d,backgroundColor:e,borderRadius:4}]},options:{indexAxis:"y",scales:{x:{ticks:{color:"#64748b"},grid:{color:"#e2e8f0",borderDash:[5,5]}},y:{ticks:{color:"#64748b"},grid:{display:!1}}}}})};const renderExpenseTypeChart=(l,d)=>{const t=document.getElementById("expenses-by-type-chart").getContext("2d");expenseTypeChart&&expenseTypeChart.destroy(),expenseTypeChart=new Chart(t,{type:"doughnut",data:{labels:l,datasets:[{data:d,backgroundColor:["#ef4444","#3b82f6","#f59e0b"],hoverOffset:4}]}})};const renderSalesBySourceChart=(l,d)=>{const t=document.getElementById("sales-by-source-chart").getContext("2d");salesBySourceChart&&salesBySourceChart.destroy();const e=l.map(()=>`rgba(${Math.floor(255*Math.random())}, ${Math.floor(255*Math.random())}, ${Math.floor(255*Math.random())}, 0.8)`);salesBySourceChart=new Chart(t,{type:"doughnut",data:{labels:l,datasets:[{label:"الدخل",data:d,backgroundColor:e,borderColor:"#f8fafc",borderWidth:4,hoverOffset:8}]},options:{plugins:{legend:{position:"bottom"}}}})};const renderTraderAnalysisChart=(l,d)=>{const t=document.getElementById("trader-analysis-chart").getContext("2d");traderAnalysisChart&&traderAnalysisChart.destroy();const e=d.map(()=>`rgba(${Math.floor(255*Math.random())}, ${Math.floor(255*Math.random())}, ${Math.floor(255*Math.random())}, 0.8)`);traderAnalysisChart=new Chart(t,{type:"bar",data:{labels:l,datasets:[{label:"إجمالي التكلفة",data:d,backgroundColor:e,borderRadius:4}]},options:{indexAxis:"y",scales:{x:{ticks:{color:"#64748b"},grid:{color:"#e2e8f0",borderDash:[5,5]}},y:{ticks:{color:"#64748b"},grid:{display:!1}}}}})};
+        const renderProductList = () => {
+            const container = document.getElementById('product-list');
+            if (!container) return;
+            if (allProducts.length === 0) {
+                container.innerHTML = `<p class="text-center text-sm text-gray-500">لا توجد منتجات. ابدأ بإضافة منتج جديد.</p>`;
+                return;
+            }
+            container.innerHTML = allProducts.map(prod => `<div class="flex justify-between items-center p-2 bg-gray-100 rounded-md"><span class="font-semibold">${prod.name}</span><button data-id="${prod.id}" class="delete-product-btn text-red-400 hover:text-red-600"><i class="fa-solid fa-trash"></i></button></div>`).join('');
+        };
+        const populateProductDropdowns = () => {
+            const productDropdowns = document.querySelectorAll('.add-productName, #edit-productName, .add-account-productName, #edit-account-productName');
+            const optionsHTML = allProducts.map(p => `<option value="${p.name}">${p.name}</option>`).join('');
+            productDropdowns.forEach(select => {
+                const currentValue = select.value;
+                select.innerHTML = `<option value="">اختر المنتج...</option>${optionsHTML}`;
+                if (currentValue) select.value = currentValue;
+            });
+        };
+        const populateAvailableAccountsDropdown = (selectElement, currentAccountId = null) => {
+            const availableAccounts = allAccounts.filter(acc => acc.is_active);
+            if (currentAccountId) {
+                const currentAccount = allAccounts.find(acc => acc.id === currentAccountId);
+                if (currentAccount && !availableAccounts.some(acc => acc.id === currentAccountId)) { availableAccounts.unshift(currentAccount); }
+            }
+            const groupedAccounts = availableAccounts.reduce((acc, account) => {
+                const product = account.productName || 'منتجات أخرى';
+                if (!acc[product]) acc[product] = [];
+                acc[product].push(account);
+                return acc;
+            }, {});
+            selectElement.innerHTML = '<option value="">اختر الأكونت المتاح</option>';
+            for(const product in groupedAccounts) {
+                const optgroup = document.createElement('optgroup');
+                optgroup.label = product;
+                groupedAccounts[product].forEach(acc => {
+                    const option = document.createElement('option');
+                    option.value = acc.id;
+                    const usesLeft = acc.allowed_uses === Infinity ? '∞' : acc.allowed_uses - acc.current_uses;
+                    option.textContent = `${acc.email} (متبقي: ${usesLeft})`;
+                    optgroup.appendChild(option);
+                });
+                selectElement.appendChild(optgroup);
+            }
+            if (currentAccountId) selectElement.value = currentAccountId;
+        };
+        const populateProductFilterButtons = () => {
+            const salesContainer = document.getElementById('sales-product-filter-container');
+            const accountsContainer = document.getElementById('accounts-product-filter-container');
+            const products = [...new Set(allProducts.map(p => p.name))].sort();
+            
+            const createButtonsHTML = (prods, currentFilter) => {
+                let html = `<button class="filter-btn ${currentFilter === 'all' ? 'active' : ''}" data-product="all">الكل</button>`;
+                prods.forEach(p => { html += `<button class="filter-btn ${currentFilter === p ? 'active' : ''}" data-product="${p}">${p}</button>`; });
+                return html;
+            }
+            salesContainer.innerHTML = createButtonsHTML(products, currentSalesProductFilter);
+            accountsContainer.innerHTML = createButtonsHTML(products, currentAccountsProductFilter);
+        };
+        
+        const openEditModal=(e)=>{const t=allSales.find(t=>t.id===e);if(!t)return;document.getElementById("edit-sale-id").value=e,document.getElementById("edit-original-accountId").value=t.accountId||"",document.getElementById("edit-contactInfo").value=t.contactInfo||"",document.getElementById("edit-contactMethod").value=t.contactMethod||"",document.getElementById("edit-productName").value=t.productName||"",document.getElementById("edit-accountType").value=t.accountType||"",document.getElementById("edit-subscription").value=t.subscription||"",document.getElementById("edit-sellingPrice").value=t.sellingPrice||0,document.getElementById("edit-costPrice").value=t.costPrice||0;const n=document.getElementById("edit-account-container"),l=document.getElementById("edit-available-accounts-select");t.accountId?(n.classList.remove("hidden"),l.required=!0,populateAvailableAccountsDropdown(l,t.accountId)):(n.classList.add("hidden"),l.required=!1),document.getElementById("edit-cost-price-container").classList.remove("hidden"),document.getElementById("edit-modal-backdrop").classList.remove("hidden"),document.getElementById("edit-modal").classList.remove("hidden")};const closeEditModal=()=>{document.getElementById("edit-modal-backdrop").classList.add("hidden"),document.getElementById("edit-modal").classList.add("hidden")};
+        const openEditAccountModal=(e)=>{const t=allAccounts.find(t=>t.id===e);if(!t)return;document.getElementById("edit-account-id").value=e,document.getElementById("edit-account-email").value=t.email||"",document.getElementById("edit-account-password").value=t.password||"",document.getElementById("edit-account-productName").value=t.productName||"",document.getElementById("edit-account-purchase_price").value=t.purchase_price||0,document.getElementById("edit-account-trader_name").value=t.trader_name||"",document.getElementById("edit-account-allowed_uses").value=t.allowed_uses===1/0?"":t.allowed_uses,document.getElementById("edit-account-current_uses").value=t.current_uses||0,document.getElementById("edit-account-is_active").checked=t.is_active,document.getElementById("edit-account-modal-backdrop").classList.remove("hidden"),document.getElementById("edit-account-modal").classList.remove("hidden")};const closeEditAccountModal=()=>{document.getElementById("edit-account-modal-backdrop").classList.add("hidden"),document.getElementById("edit-account-modal").classList.add("hidden")};const openEditExpenseModal=(e)=>{const t=allExpenses.find(t=>t.id===e);if(!t)return;document.getElementById("edit-expense-id").value=e,document.getElementById("edit-expense-type").value=t.type||"",document.getElementById("edit-expense-amount").value=t.amount||0,document.getElementById("edit-expense-description").value=t.description||"",document.getElementById("edit-expense-modal-backdrop").classList.remove("hidden"),document.getElementById("edit-expense-modal").classList.remove("hidden")};const closeEditExpenseModal=()=>{document.getElementById("edit-expense-modal-backdrop").classList.add("hidden"),document.getElementById("edit-expense-modal").classList.add("hidden")};
+
+        // --- EXPORT FUNCTION ---
+        const exportSalesToExcel = () => {
+            let salesToExport = [...allSales];
+
+            if (dateRangeStart && dateRangeEnd) {
+                salesToExport = salesToExport.filter(s => {
+                    const saleDate = s.date?.seconds ? new Date(s.date.seconds * 1000) : null;
+                    return saleDate && saleDate >= dateRangeStart && saleDate <= dateRangeEnd;
+                });
+            }
+            if (currentSalesProductFilter !== 'all') {
+                salesToExport = salesToExport.filter(s => s.productName === currentSalesProductFilter);
+            }
+            if (currentStatusFilter === 'unconfirmed') {
+                salesToExport = salesToExport.filter(s => !s.isConfirmed);
+            }
+
+            if (salesToExport.length === 0) {
+                showNotification('لا توجد بيانات لتصديرها.', 'info');
+                return;
+            }
+
+            const dataForSheet = salesToExport.map(sale => {
+                const profit = (sale.sellingPrice || 0) - (sale.costPrice || 0);
+                const saleDate = sale.date?.seconds ? new Date(sale.date.seconds * 1000).toLocaleString('ar-EG') : '-';
+                return {
+                    'تاريخ البيع': saleDate,
+                    'بيانات التواصل': sale.contactInfo,
+                    'وسيلة التواصل': sale.contactMethod,
+                    'المنتج': sale.productName,
+                    'نوع الحساب': sale.accountType,
+                    'مدة الاشتراك': sale.subscription,
+                    'إيميل الاشتراك': sale.customerEmail,
+                    'الباسورد': sale.password,
+                    'سعر البيع': sale.sellingPrice,
+                    'التكلفة': sale.costPrice,
+                    'الربح': profit,
+                    'الحالة': sale.isConfirmed ? 'مؤكد' : 'غير مؤكد'
+                };
+            });
+
+            const worksheet = XLSX.utils.json_to_sheet(dataForSheet);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, 'المبيعات');
+            
+            worksheet['!props'] = { rtl: true };
+
+            XLSX.writeFile(workbook, 'Sales_Report.xlsx');
+            showNotification('تم تصدير البيانات بنجاح!', 'success');
+        };
+
+        // --- EVENT LISTENERS & FORM SUBMISSIONS ---
+        const setupEventListeners = () => {
+            const formatContactInfo = e => {
+                const input = e.target;
+                let value = input.value;
+                const hasLetters = /[a-zA-Zء-ي]/.test(value);
+                if (!hasLetters && value.includes(' ')) {
+                    const formattedValue = value.replace(/\s/g, '');
+                    if (value !== formattedValue) {
+                        input.value = formattedValue;
+                    }
+                }
+            };
+            document.getElementById('add-contactInfo').addEventListener('input', formatContactInfo);
+            document.getElementById('edit-contactInfo').addEventListener('input', formatContactInfo);
+
+            const tabs = document.querySelectorAll('.nav-tab');
+            const tabContents = document.querySelectorAll('.tab-content');
+            tabs.forEach(tab => {
+                tab.addEventListener('click', () => {
+                    tabs.forEach(t => t.classList.remove('active'));
+                    tab.classList.add('active');
+                    const target = document.getElementById(tab.dataset.tab + '-section');
+                    tabContents.forEach(tc => tc.classList.add('hidden'));
+                    target.classList.remove('hidden');
+                });
+            });
+
+            flatpickrInstance = flatpickr("#date-range-filter", {
+                mode: "range", dateFormat: "Y-m-d", locale: "ar",
+                onChange: function(selectedDates) {
+                    if (selectedDates.length === 0) { dateRangeStart = null; dateRangeEnd = null; } 
+                    else if (selectedDates.length === 1) {
+                        dateRangeStart = new Date(selectedDates[0].setHours(0, 0, 0, 0));
+                        dateRangeEnd = new Date(selectedDates[0].setHours(23, 59, 59, 999));
+                    } else {
+                        dateRangeStart = new Date(selectedDates[0].setHours(0, 0, 0, 0));
+                        dateRangeEnd = new Date(selectedDates[1].setHours(23, 59, 59, 999));
+                    }
+                    renderData();
+                }
+            });
+            document.getElementById('clear-date-filter-btn').addEventListener('click', () => { if(flatpickrInstance) flatpickrInstance.clear(); });
+            
+            document.getElementById('export-sales-btn').addEventListener('click', exportSalesToExcel);
+
+            document.body.addEventListener('click', (e) => {
+                if(e.target.closest('#sales-product-filter-container .filter-btn')){
+                    currentSalesProductFilter = e.target.closest('.filter-btn').dataset.product;
+                    renderData();
+                }
+                if(e.target.closest('#accounts-product-filter-container .filter-btn')){
+                    currentAccountsProductFilter = e.target.closest('.filter-btn').dataset.product;
+                    renderData();
+                }
+            });
+            document.getElementById('sales-status-filter-container').addEventListener('click', (e) => {
+                if (e.target.classList.contains('filter-btn')) {
+                    currentStatusFilter = e.target.dataset.status;
+                    document.querySelectorAll('#sales-status-filter-container .filter-btn').forEach(btn => btn.classList.remove('active'));
+                    e.target.classList.add('active');
+                    renderData();
+                }
+            });
+
+            document.getElementById('search-input').addEventListener('keyup', (e) => {
+                const searchTerm = e.target.value.toLowerCase();
+                let baseData = allSales.filter(sale => Object.values(sale).some(val => String(val).toLowerCase().includes(searchTerm)));
+                updateSalesTable(baseData);
+            });
+             document.getElementById('search-accounts-input').addEventListener('keyup', (e) => {
+                const searchTerm = e.target.value.toLowerCase();
+                let baseData = allAccounts.filter(acc => acc.email.toLowerCase().includes(searchTerm) || acc.trader_name.toLowerCase().includes(searchTerm));
+                updateAccountsTable(baseData);
+            });
+            
+            document.getElementById('cancel-edit-btn').addEventListener('click', closeEditModal);
+            document.getElementById('edit-modal-backdrop').addEventListener('click', closeEditModal);
+            document.getElementById('cancel-edit-account-btn').addEventListener('click', closeEditAccountModal);
+            document.getElementById('edit-account-modal-backdrop').addEventListener('click', closeEditAccountModal);
+            document.getElementById('cancel-edit-expense-btn').addEventListener('click', closeEditExpenseModal);
+            document.getElementById('edit-expense-modal-backdrop').addEventListener('click', closeEditExpenseModal);
+
+            document.getElementById('toggle-add-sale-form').addEventListener('click', () => {
+                populateAvailableAccountsDropdown(document.querySelector('#available-accounts-select'));
+                document.getElementById('add-sale-container').classList.toggle('open');
+            });
+             document.getElementById('toggle-add-problem-form').addEventListener('click', () => {
+                const saleSelect = document.getElementById('problem-sale-id');
+                const accountSelect = document.getElementById('problem-replacement-account-id');
+                saleSelect.innerHTML = `<option value="">اختر الأوردر المرتبط بالمشكلة...</option>` + 
+                    allSales.filter(s => s.accountId && s.isConfirmed)
+                    .map(s => `<option value="${s.id}">${s.contactInfo} (${s.productName})</option>`).join('');
+                populateAvailableAccountsDropdown(accountSelect);
+                document.getElementById('add-problem-container').classList.toggle('open');
+            });
+            document.getElementById('toggle-add-account-form').addEventListener('click', () => document.getElementById('add-account-container').classList.toggle('open'));
+            document.getElementById('toggle-add-expense-form').addEventListener('click', () => document.getElementById('add-expense-container').classList.toggle('open'));
+
+            // FIX: Added event listener for manual sale checkbox
+            document.getElementById('manual-sale-checkbox').addEventListener('change', (e) => {
+                const isChecked = e.target.checked;
+                const manualContainer = document.getElementById('manual-sale-container');
+                const inventoryContainer = document.getElementById('inventory-sale-container');
+                const inventorySelect = document.getElementById('available-accounts-select');
+                
+                manualContainer.classList.toggle('hidden', !isChecked);
+                inventoryContainer.classList.toggle('hidden', isChecked);
+                
+                inventorySelect.required = !isChecked;
+            });
+        };
+        
+        const setupFormSubmissions = () => {
+            document.getElementById('add-product-form').addEventListener('submit', async e => {
+                e.preventDefault();
+                const form = e.target;
+                const productName = form.productName.value.trim();
+                if (productName) {
+                    try {
+                        await addDoc(collection(db, PATH_PRODUCTS), { name: productName });
+                        showNotification(`تمت إضافة منتج "${productName}" بنجاح!`, 'success');
+                        form.reset();
+                    } catch (error) { showNotification('خطأ في إضافة المنتج.', 'danger'); }
+                }
+            });
+
+            document.getElementById('add-account-form').addEventListener('submit', async e => {
+                e.preventDefault();
+                const form = e.target;
+                const submitBtn = form.querySelector('button[type="submit"]');
+                submitBtn.disabled = true; submitBtn.textContent = 'جاري الإضافة...';
+                try {
+                    const formData = new FormData(form);
+                    const isLifetime = document.getElementById('lifetime-checkbox').checked;
+                    const allowedUsesValue = formData.get('allowed_uses');
+                    if (!isLifetime && (!allowedUsesValue || parseInt(allowedUsesValue) < 1)) throw new Error("يجب تحديد عدد استخدامات صالح.");
+                    
+                    const accountsText = formData.get('emails').trim();
+                    const accountsArray = accountsText.split('\n').map(line => {
+                        const parts = line.trim().split(':');
+                        if (parts.length < 2 || !parts[0] || !parts[1]) return null;
+                        return { email: parts[0].trim(), password: parts.slice(1).join(':').trim() };
+                    }).filter(Boolean);
+
+                    if (accountsArray.length === 0) {
+                        throw new Error("الرجاء إدخال بيانات الأكونتات بالصيغة الصحيحة (email:password).");
+                    }
+
+                    const commonData = {
+                        productName: formData.get('productName'), purchase_price: parseFloat(formData.get('purchase_price')),
+                        trader_name: formData.get('trader_name').trim(), allowed_uses: isLifetime ? Infinity : parseInt(allowedUsesValue),
+                        current_uses: 0, is_active: true, purchase_date: serverTimestamp()
+                    };
+                    const batch = writeBatch(db);
+                    accountsArray.forEach(account => {
+                        batch.set(doc(collection(db, PATH_ACCOUNTS)), { ...commonData, email: account.email, password: account.password });
+                    });
+                    await batch.commit();
+                    showNotification(`تمت إضافة ${accountsArray.length} أكونت بنجاح!`, "success");
+                    form.reset();
+                    document.getElementById('lifetime-checkbox').dispatchEvent(new Event('change')); 
+                    document.getElementById('add-account-container').classList.remove('open');
+                } catch (err) {
+                    showNotification(err.message || "حدث خطأ.", "danger");
+                } finally {
+                    submitBtn.disabled = false; submitBtn.textContent = 'إضافة الأكونتات';
+                }
+            });
+
+            document.getElementById('add-sale-form').addEventListener('submit', async e => {
+                e.preventDefault();
+                const form = e.target;
+                const submitBtn = form.querySelector('button[type="submit"]');
+                const isManualSale = document.getElementById('manual-sale-checkbox').checked;
+                submitBtn.disabled = true; submitBtn.textContent = 'جاري الإضافة...';
+                try {
+                    const formData = new FormData(form);
+                    if (isManualSale) {
+                        const saleData = {
+                            contactInfo: formData.get('contactInfo'), contactMethod: formData.get('contactMethod'), productName: formData.get('productName'),
+                            accountType: formData.get('accountType'), subscription: formData.get('subscription'), sellingPrice: parseFloat(formData.get('sellingPrice')),
+                            costPrice: parseFloat(formData.get('costPrice')) || 0, // FIX: Handle empty cost
+                            customerEmail: formData.get('customerEmail'), accountId: null, date: serverTimestamp(),
+                            password: '',
+                            isConfirmed: false
+                        };
+                        await addDoc(collection(db, PATH_SALES), saleData);
+                    } else {
+                        const accountId = form.accountId.value;
+                        if (!accountId) throw new Error("يجب اختيار أكونت متاح من المخزون.");
+                        await runTransaction(db, async (transaction) => {
+                            const accountRef = doc(db, PATH_ACCOUNTS, accountId);
+                            const accountDoc = await transaction.get(accountRef);
+                            if (!accountDoc.exists() || !accountDoc.data().is_active) throw new Error("Account not available.");
+                            const accountData = accountDoc.data();
+                            const accountType = formData.get('accountType');
+                            let newUses = accountData.current_uses, newIsActive = accountData.is_active;
+                            if (accountType === 'Private') { newIsActive = false; }
+                            else if (accountType === 'Subscriber') {
+                                newUses++;
+                                if(newUses >= accountData.allowed_uses && accountData.allowed_uses !== Infinity) newIsActive = false;
+                            }
+                            transaction.update(accountRef, { current_uses: newUses, is_active: newIsActive });
+                            const saleData = {
+                                contactInfo: formData.get('contactInfo'), contactMethod: formData.get('contactMethod'), productName: formData.get('productName'),
+                                accountType: accountType, subscription: formData.get('subscription'), sellingPrice: parseFloat(formData.get('sellingPrice')),
+                                costPrice: accountData.purchase_price, customerEmail: accountData.email, accountId: accountId, date: serverTimestamp(),
+                                password: accountData.password || '',
+                                isConfirmed: false 
+                            };
+                            transaction.set(doc(collection(db, PATH_SALES)), saleData);
+                        });
+                    }
+                    showNotification("تم إضافة الاوردر بنجاح!", "success");
+                    form.reset();
+                    document.getElementById('manual-sale-checkbox').dispatchEvent(new Event('change'));
+                    document.getElementById('add-sale-container').classList.remove('open');
+                } catch (err) {
+                    showNotification(err.message || "حدث خطأ.", "danger");
+                } finally {
+                    submitBtn.disabled = false; submitBtn.textContent = 'إضافة الاوردر';
+                }
+            });
+            
+            document.getElementById('add-problem-form').addEventListener('submit', async e => {
+                e.preventDefault();
+                const form = e.target;
+                const submitBtn = form.querySelector('button[type="submit"]');
+                submitBtn.disabled = true; submitBtn.textContent = 'جاري الإضافة...';
+                const saleId = form.saleId.value;
+                const replacementAccountId = form.replacementAccountId.value;
+                const description = form.description.value;
+                try {
+                    await runTransaction(db, async (transaction) => {
+                        const originalSaleRef = doc(db, PATH_SALES, saleId);
+                        const originalSaleDoc = await transaction.get(originalSaleRef);
+                        if (!originalSaleDoc.exists()) throw new Error("الأوردر الأصلي غير موجود.");
+
+                        const originalAccountId = originalSaleDoc.data().accountId;
+                        if (!originalAccountId) throw new Error("هذا الأوردر ليس مرتبطًا بأكونت من المخزون.");
+                        
+                        const originalAccountRef = doc(db, PATH_ACCOUNTS, originalAccountId);
+                        const replacementAccountRef = doc(db, PATH_ACCOUNTS, replacementAccountId);
+
+                        const [originalAccountDoc, replacementAccountDoc] = await Promise.all([
+                            transaction.get(originalAccountRef),
+                            transaction.get(replacementAccountRef)
+                        ]);
+                        if (!replacementAccountDoc.exists()) throw new Error("الأكونت البديل غير موجود.");
+
+                        transaction.update(originalAccountRef, { is_active: false });
+
+                        const replacementAccountData = replacementAccountDoc.data();
+                        const originalSaleData = originalSaleDoc.data();
+                        let newUses = replacementAccountData.current_uses;
+                        let newIsActive = replacementAccountData.is_active;
+
+                        if (originalSaleData.accountType === 'Private') {
+                            newIsActive = false;
+                        } else if (originalSaleData.accountType === 'Subscriber') {
+                            newUses++;
+                            if (newUses >= replacementAccountData.allowed_uses && replacementAccountData.allowed_uses !== Infinity) {
+                                newIsActive = false;
+                            }
+                        }
+                        transaction.update(replacementAccountRef, { current_uses: newUses, is_active: newIsActive });
+                        
+                        transaction.update(originalSaleRef, {
+                            accountId: replacementAccountId,
+                            customerEmail: replacementAccountData.email,
+                            costPrice: replacementAccountData.purchase_price
+                        });
+
+                        const problemRef = doc(collection(db, PATH_PROBLEMS));
+                        transaction.set(problemRef, {
+                            saleId, originalAccountId, replacementAccountId, description, date: serverTimestamp(),
+                        });
+                    });
+                    showNotification("تم تسجيل المشكلة بنجاح!", "success");
+                    form.reset();
+                    document.getElementById('add-problem-container').classList.remove('open');
+                } catch (err) {
+                    showNotification(err.message || "حدث خطأ.", "danger");
+                } finally {
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'إضافة المشكلة';
+                }
+            });
+
+            document.getElementById('add-expense-form').addEventListener('submit', async e => {
+                 e.preventDefault();
+                const submitBtn = e.target.querySelector('button[type="submit"]');
+                submitBtn.disabled = true; submitBtn.textContent = 'جاري الإضافة...';
+                const formData = new FormData(e.target);
+                const data = Object.fromEntries(formData.entries());
+                try {
+                    await addDoc(collection(db, PATH_EXPENSES), { ...data, amount: parseFloat(data.amount), date: serverTimestamp() });
+                    showNotification("تمت إضافة المصروف بنجاح!", "success");
+                    e.target.reset();
+                    document.getElementById('add-expense-container').classList.remove('open');
+                } catch (err) { 
+                    showNotification("حدث خطأ أثناء إضافة المصروف.", "danger");
+                } finally {
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'إضافة مصروف';
+                }
+            });
+
+            document.getElementById('edit-sale-form').addEventListener('submit', async e => {
+                e.preventDefault();
+                const form = e.target;
+                const submitBtn = form.querySelector('button[type="submit"]');
+                submitBtn.disabled = true;
+                
+                const saleId = form.id.value;
+                const originalAccountId = form.querySelector('#edit-original-accountId').value;
+                const newAccountId = form.accountId.value;
+                
+                const saleToUpdate = allSales.find(s => s.id === saleId);
+                if (!saleToUpdate) {
+                    showNotification("لم يتم العثور على الأوردر.", "danger");
+                    submitBtn.disabled = false;
+                    return;
+                }
+                const isOriginallyManualSale = !saleToUpdate.accountId;
+
+                try {
+                    await runTransaction(db, async (transaction) => {
+                        const saleRef = doc(db, PATH_SALES, saleId);
+                        const formData = new FormData(form);
+                        const updatedFields = {
+                            contactInfo: formData.get('contactInfo'), contactMethod: formData.get('contactMethod'),
+                            productName: formData.get('productName'), accountType: formData.get('accountType'),
+                            subscription: formData.get('subscription'), sellingPrice: parseFloat(formData.get('sellingPrice')),
+                            costPrice: parseFloat(formData.get('costPrice'))
+                        };
+
+                        if (isOriginallyManualSale) {
+                            transaction.update(saleRef, updatedFields);
+                            return; 
+                        }
+
+                        const originalAccountRef = doc(db, PATH_ACCOUNTS, originalAccountId);
+
+                        if (originalAccountId && originalAccountId !== newAccountId) {
+                            const newAccountRef = doc(db, PATH_ACCOUNTS, newAccountId);
+                            
+                            const [originalAccountDoc, newAccountDoc] = await Promise.all([
+                                transaction.get(originalAccountRef),
+                                transaction.get(newAccountRef)
+                            ]);
+                            if (!newAccountDoc.exists()) throw new Error("الأكونت الجديد غير موجود.");
+                            if (!originalAccountDoc.exists()) throw new Error("الأكونت الأصلي المرتبط بالبيع لم يعد موجوداً.");
+                            
+                            const originalAccountData = originalAccountDoc.data();
+                            const revertUpdateData = { is_active: true };
+                            if (saleToUpdate.accountType === 'Subscriber') {
+                                revertUpdateData.current_uses = Math.max(0, originalAccountData.current_uses - 1);
+                            }
+                            transaction.update(originalAccountRef, revertUpdateData);
+
+                            const newAccountData = newAccountDoc.data();
+                            let newUses = newAccountData.current_uses;
+                            let newIsActive = newAccountData.is_active;
+
+                            if (updatedFields.accountType === 'Private') { newIsActive = false; } 
+                            else if (updatedFields.accountType === 'Subscriber') {
+                                newUses++;
+                                if (newUses >= newAccountData.allowed_uses && newAccountData.allowed_uses !== Infinity) {
+                                    newIsActive = false;
+                                }
+                            }
+                            transaction.update(newAccountRef, { current_uses: newUses, is_active: newIsActive });
+                            
+                            updatedFields.accountId = newAccountId;
+                            updatedFields.customerEmail = newAccountData.email;
+                            updatedFields.password = newAccountData.password || '';
+                        } 
+                        
+                        transaction.update(saleRef, updatedFields);
+                    });
+                    showNotification("تم التعديل بنجاح!", "info");
+                    closeEditModal();
+                } catch (err) {
+                    console.error("Edit Sale Error:", err);
+                    showNotification(err.message || "حدث خطأ أثناء التعديل.", "danger");
+                } finally {
+                    submitBtn.disabled = false;
+                }
+            });
+
+             document.getElementById('edit-account-form').addEventListener('submit', async (e) => {
+                 e.preventDefault();
+                const submitBtn = e.target.querySelector('button[type="submit"]');
+                submitBtn.disabled = true;
+                const accountId = document.getElementById('edit-account-id').value;
+                try {
+                    const dataToUpdate = {
+                         email: document.getElementById('edit-account-email').value.trim(),
+                         password: document.getElementById('edit-account-password').value.trim(),
+                         productName: document.getElementById('edit-account-productName').value,
+                         purchase_price: parseFloat(document.getElementById('edit-account-purchase_price').value), trader_name: document.getElementById('edit-account-trader_name').value.trim(),
+                         allowed_uses: parseFloat(document.getElementById('edit-account-allowed_uses').value) || Infinity, current_uses: parseInt(document.getElementById('edit-account-current_uses').value),
+                         is_active: document.getElementById('edit-account-is_active').checked
+                    };
+                    await updateDoc(doc(db, PATH_ACCOUNTS, accountId), dataToUpdate);
+                    showNotification("تم تعديل الأكونت بنجاح!", "info");
+                    closeEditAccountModal();
+                } catch (err) {
+                    showNotification("حدث خطأ أثناء التعديل.", "danger");
+                } finally {
+                    submitBtn.disabled = false;
+                }
+             });
+
+             document.getElementById('edit-expense-form').addEventListener('submit', async (e) => {
+                 e.preventDefault();
+                const submitBtn = e.target.querySelector('button[type="submit"]');
+                submitBtn.disabled = true;
+                const expenseId = document.getElementById('edit-expense-id').value;
+                try {
+                    const dataToUpdate = {
+                         type: document.getElementById('edit-expense-type').value,
+                         amount: parseFloat(document.getElementById('edit-expense-amount').value),
+                         description: document.getElementById('edit-expense-description').value.trim()
+                    };
+                    await updateDoc(doc(db, PATH_EXPENSES, expenseId), dataToUpdate);
+                    showNotification("تم تعديل المصروف بنجاح!", "info");
+                    closeEditExpenseModal();
+                } catch (err) {
+                    showNotification("حدث خطأ أثناء التعديل.", "danger");
+                } finally {
+                    submitBtn.disabled = false;
+                }
+             });
+        };
+        
+        const setupDynamicEventListeners = () => {
+            document.body.addEventListener('click', async (e) => {
+                const target = e.target.closest('.copyable, .confirm-sale-btn, .edit-sale-btn, .delete-sale-btn, .delete-product-btn, .edit-account-btn, .delete-account-btn, .edit-expense-btn, .delete-expense-btn, .renewal-action-btn');
+                if (!target) return;
+
+                if (target.matches('.copyable')) {
+                    const textToCopy = target.dataset.copyText;
+                    if (textToCopy) copyToClipboard(textToCopy);
+                } 
+                else if (target.matches('.renewal-action-btn')) {
+                    const saleId = target.dataset.id;
+                    const action = target.dataset.action;
+                    try {
+                        await updateDoc(doc(db, PATH_SALES, saleId), { renewalStatus: action });
+                        let message = '';
+                        if(action === 'alerted') message = 'تم تسجيل التنبيه.';
+                        else if(action === 'renewed') message = 'تم تسجيل التجديد.';
+                        else if(action === 'not-renewed') message = 'تم تسجيل عدم التجديد.';
+                        showNotification(message, 'info');
+                    } catch (err) {
+                        showNotification('خطأ في تحديث الحالة.', 'danger');
+                    }
+                }
+                else if (target.matches('.confirm-sale-btn')) {
+                    const saleId = target.dataset.id;
+                    if (confirm('هل أنت متأكد من تأكيد هذا الأوردر؟')) {
+                        try {
+                            await updateDoc(doc(db, PATH_SALES, saleId), { isConfirmed: true });
+                            showNotification('تم تأكيد الأوردر بنجاح!', 'success');
+                        } catch (err) { showNotification('خطأ في تأكيد الأوردر.', 'danger');}
+                    }
+                } 
+                else if (target.matches('.edit-sale-btn')) {
+                    openEditModal(target.closest('[data-sale-id]').dataset.saleId);
+                } 
+                else if (target.matches('.delete-sale-btn')) {
+                    if (confirm('هل أنت متأكد من حذف هذا الاوردر؟ سيتم إرجاع الاستخدام للأكونت المرتبط.')) {
+                        const saleId = target.closest('[data-sale-id]').dataset.saleId;
+                        try {
+                            const saleToDelete = allSales.find(s => s.id === saleId);
+                            if (saleToDelete && saleToDelete.accountId) { 
+                                await runTransaction(db, async (transaction) => {
+                                    const saleRef = doc(db, PATH_SALES, saleId);
+                                    const accountRef = doc(db, PATH_ACCOUNTS, saleToDelete.accountId);
+                                    const accountDoc = await transaction.get(accountRef);
+                                    if (accountDoc.exists()) {
+                                        const accountData = accountDoc.data();
+                                        let newCurrentUses = accountData.current_uses;
+                                        if (saleToDelete.accountType === 'Subscriber') newCurrentUses -= 1;
+                                        transaction.update(accountRef, { current_uses: Math.max(0, newCurrentUses), is_active: true });
+                                    }
+                                    transaction.delete(saleRef);
+                                });
+                            } else { await deleteDoc(doc(db, PATH_SALES, saleId)); }
+                            showNotification("تم حذف الأوردر بنجاح.", "success");
+                        } catch (err) { showNotification(err.message || "حدث خطأ.", "danger"); }
+                    }
+                } 
+                else if (target.matches('.delete-product-btn')) {
+                    const productId = target.dataset.id;
+                    if (confirm('هل أنت متأكد من حذف هذا المنتج؟')) {
+                        try {
+                            await deleteDoc(doc(db, PATH_PRODUCTS, productId));
+                            showNotification('تم حذف المنتج.', 'danger');
+                        } catch (error) { showNotification('خطأ في حذف المنتج.', 'danger'); }
+                    }
+                } 
+                else if (target.matches('.edit-account-btn')) {
+                    const accountId = target.closest('tr').querySelector('.delete-account-btn').dataset.id;
+                    openEditAccountModal(accountId);
+                } 
+                else if (target.matches('.delete-account-btn')) {
+                    const accountId = target.dataset.id;
+                    if (allSales.some(sale => sale.accountId === accountId)) {
+                        return alert("لا يمكن حذف هذا الأكونت لأنه مرتبط بأوردر واحد على الأقل.");
+                    }
+                    if (confirm('هل أنت متأكد من حذف هذا الأكونت؟')) {
+                        try {
+                            await deleteDoc(doc(db, PATH_ACCOUNTS, accountId));
+                            showNotification("تم حذف الأكونت.", "danger");
+                        } catch (err) { showNotification("حدث خطأ.", "danger"); }
+                    }
+                } 
+                else if(target.matches('.edit-expense-btn')) {
+                    const expenseId = target.dataset.id;
+                    openEditExpenseModal(expenseId);
+                } 
+                else if(target.matches('.delete-expense-btn')) {
+                    if (confirm('هل أنت متأكد من حذف هذا المصروف؟')) {
+                        try {
+                             await deleteDoc(doc(db, PATH_EXPENSES, target.dataset.id));
+                             showNotification("تم الحذف بنجاح.", "danger");
+                        } catch (err) { showNotification("حدث خطأ.", "danger"); }
+                    }
+                }
+            });
+        };
+
+        // --- APP INITIALIZATION ---
+        async function initializeAppAndListeners() {
+            setupChartDefaults();
+            setupEventListeners();
+            setupFormSubmissions();
+            setupDynamicEventListeners();
+
+            try {
+                await signInAnonymously(auth);
+                console.log("Signed in anonymously to Firebase.");
+            } catch (error) {
+                console.error("Firebase anonymous sign-in failed:", error);
+                showNotification("فشل الاتصال بالخادم. برجاء تحديث الصفحة.", "danger");
+                document.getElementById('dashboard-loader').innerHTML = `<p class="text-red-500">فشل المصادقة مع الخادم. تأكد من تفعيل "تسجيل الدخول المجهول" في إعدادات Firebase.</p>`;
+                return;
+            }
+
+            // Fetch initial data to show the UI quickly, then set up real-time listeners
+            try {
+                const [salesSnap, expensesSnap, accountsSnap, productsSnap, problemsSnap] = await Promise.all([
+                    getDocs(query(collection(db, PATH_SALES), orderBy("date", "desc"))),
+                    getDocs(query(collection(db, PATH_EXPENSES), orderBy("date", "desc"))),
+                    getDocs(query(collection(db, PATH_ACCOUNTS), orderBy("purchase_date", "desc"))),
+                    getDocs(query(collection(db, PATH_PRODUCTS), orderBy("name"))),
+                    getDocs(query(collection(db, PATH_PROBLEMS), orderBy("date", "desc")))
+                ]);
+
+                allSales = salesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+                allExpenses = expensesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+                allAccounts = accountsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+                allProducts = productsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+                allProblems = problemsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+                populateProductDropdowns();
+                renderProductList();
+                renderData();
+                
+                document.getElementById('dashboard-loader').classList.add('hidden');
+                document.getElementById('dashboard-content').classList.remove('hidden');
+
+            } catch (error) {
+                console.error("Error fetching initial data:", error);
+                document.getElementById('dashboard-loader').innerHTML = `<p class="text-red-500">فشل الاتصال بقاعدة البيانات. الرجاء تحديث الصفحة.</p>`;
+            }
+
+            onSnapshot(query(collection(db, PATH_SALES), orderBy("date", "desc")), snap => { allSales = snap.docs.map(d => ({ id: d.id, ...d.data() })); renderData(); });
+            onSnapshot(query(collection(db, PATH_EXPENSES), orderBy("date", "desc")), snap => { allExpenses = snap.docs.map(d => ({ id: d.id, ...d.data() })); renderData(); });
+            onSnapshot(query(collection(db, PATH_ACCOUNTS), orderBy("purchase_date", "desc")), snap => { allAccounts = snap.docs.map(d => ({ id: d.id, ...d.data() })); renderData(); });
+            onSnapshot(query(collection(db, PATH_PRODUCTS), orderBy("name")), snap => { allProducts = snap.docs.map(d => ({ id: d.id, ...d.data() })); populateProductDropdowns(); renderProductList(); renderData(); });
+            onSnapshot(query(collection(db, PATH_PROBLEMS), orderBy("date", "desc")), snap => { allProblems = snap.docs.map(d => ({ id: d.id, ...d.data() })); renderData(); });
+        }
+
+        initializeAppAndListeners();
+    </script>
 </body>
 </html>
