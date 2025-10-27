@@ -31,12 +31,12 @@
     <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js">
     <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js">
     
-    <!-- Non-critical scripts loaded with defer -->
-    <script src="https://cdn.tailwindcss.com" defer></script>
-    <script src="https://cdn.jsdelivr.net/npm/flatpickr" defer></script>
-    <script src="https://npmcdn.com/flatpickr/dist/l10n/ar.js" defer></script>
-    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js" defer></script>
+    <!-- Critical scripts - load synchronously to ensure app.js works -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    <script src="https://npmcdn.com/flatpickr/dist/l10n/ar.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body class="p-4 md:p-8">
 
@@ -101,7 +101,13 @@
                      </button>
                 </div>
 
-                <div id="dashboard-loader" class="text-center text-gray-500 py-10"><p>جاري الاتصال بقاعدة البيانات...</p></div>
+                <div id="dashboard-loader" class="text-center text-gray-500 py-10">
+                    <div class="flex flex-col items-center justify-center">
+                        <div class="animate-spin rounded-full h-16 w-16 border-b-2 border-indigo-600 mb-4"></div>
+                        <p class="text-lg font-semibold">جاري تحميل التطبيق...</p>
+                        <p class="text-sm mt-2">يرجى الانتظار</p>
+                    </div>
+                </div>
 
                 <div id="dashboard-content" class="grid grid-cols-12 gap-6 hidden">
                     <!-- Dashboard cards will be rendered here by JavaScript -->
