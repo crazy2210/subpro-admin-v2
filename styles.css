@@ -108,4 +108,150 @@ body.dark-mode .stat-mini:hover {
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
 }
 
-@media (max-width:768px){.responsive-table thead{display:none}.responsive-table tr{display:block;margin-bottom:1rem;border:1px solid var(--border-color);border-radius:.5rem;overflow:hidden}.responsive-table td{display:flex;justify-content:space-between;align-items:center;padding:.75rem 1rem;text-align:left;border-bottom:1px solid var(--background-color)}.responsive-table td:last-child{border-bottom:none}.responsive-table td:before{content:attr(data-label);font-weight:600;margin-left:.5rem;color:var(--text-secondary)}}
+/* Shift Statistics Cards */
+.shift-card {
+    background: linear-gradient(135deg, var(--card-background) 0%, var(--primary-color-light) 100%);
+    border-radius: 1rem;
+    padding: 1.5rem;
+    border: 2px solid var(--border-color);
+    transition: all 0.3s ease;
+}
+
+.shift-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+}
+
+body.dark-mode .shift-card {
+    background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+}
+
+.shift-card .shift-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 2px solid var(--border-color);
+}
+
+.shift-card .shift-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 1rem;
+}
+
+.shift-stat-item {
+    text-align: center;
+    padding: 0.75rem;
+    background: var(--card-background);
+    border-radius: 0.5rem;
+}
+
+body.dark-mode .shift-stat-item {
+    background: #0f172a;
+}
+
+/* Renewal Cards */
+.renewal-card {
+    border-right: 4px solid;
+    transition: all 0.2s ease;
+}
+
+.renewal-card.urgent {
+    border-right-color: #ef4444;
+    background-color: #fef2f2;
+}
+
+.renewal-card.soon {
+    border-right-color: #f59e0b;
+    background-color: #fffbeb;
+}
+
+.renewal-card.normal {
+    border-right-color: #10b981;
+    background-color: #f0fdf4;
+}
+
+.renewal-card.expired {
+    border-right-color: #6b7280;
+    background-color: #f9fafb;
+}
+
+body.dark-mode .renewal-card.urgent {
+    background-color: #450a0a;
+}
+
+body.dark-mode .renewal-card.soon {
+    background-color: #451a03;
+}
+
+body.dark-mode .renewal-card.normal {
+    background-color: #022c22;
+}
+
+body.dark-mode .renewal-card.expired {
+    background-color: #1f2937;
+}
+
+/* Ad Campaign Cards */
+.ad-campaign-row {
+    transition: all 0.2s ease;
+}
+
+.ad-campaign-row:hover {
+    background-color: var(--primary-color-light);
+}
+
+body.dark-mode .ad-campaign-row:hover {
+    background-color: #334155;
+}
+
+.platform-badge {
+    padding: 0.25rem 0.75rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.platform-facebook { background-color: #1877f2; color: white; }
+.platform-instagram { background: linear-gradient(45deg, #f09433 0%,#e6683c 25%,#dc2743 50%,#cc2366 75%,#bc1888 100%); color: white; }
+.platform-google { background-color: #4285f4; color: white; }
+.platform-tiktok { background-color: #000000; color: white; }
+.platform-snapchat { background-color: #fffc00; color: #000; }
+.platform-other { background-color: #6b7280; color: white; }
+
+/* Enhanced stat cards */
+.stat-card {
+    position: relative;
+    overflow: hidden;
+}
+
+.stat-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(135deg, transparent 0%, rgba(255,255,255,0.1) 100%);
+    pointer-events: none;
+}
+
+/* Improved responsive design */
+@media (max-width:768px){
+    .responsive-table thead{display:none}
+    .responsive-table tr{display:block;margin-bottom:1rem;border:1px solid var(--border-color);border-radius:.5rem;overflow:hidden}
+    .responsive-table td{display:flex;justify-content:space-between;align-items:center;padding:.75rem 1rem;text-align:left;border-bottom:1px solid var(--background-color)}
+    .responsive-table td:last-child{border-bottom:none}
+    .responsive-table td:before{content:attr(data-label);font-weight:600;margin-left:.5rem;color:var(--text-secondary)}
+    
+    .shift-card .shift-stats {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .nav-tab {
+        font-size: 0.875rem;
+        padding: 0.5rem 0.75rem;
+    }
+}

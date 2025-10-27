@@ -17,18 +17,27 @@ const db = getFirestore(app);
 const auth = getAuth(app);
 
 // Global state variables
-let allSales = [], allExpenses = [], allAccounts = [], allProducts = [], allProblems = [];
+let allSales = [], allExpenses = [], allAccounts = [], allProducts = [], allProblems = [], allAdCampaigns = [];
 let dateRangeStart = null, dateRangeEnd = null;
 let expenseDateRangeStart = null, expenseDateRangeEnd = null;
-let flatpickrInstance = null, expenseFlatpickrInstance = null;
+let flatpickrInstance = null, expenseFlatpickrInstance = null, shiftDatePicker = null, adStartDatePicker = null, adEndDatePicker = null;
 let currentSalesProductFilter = 'all';
 let currentAccountsProductFilter = 'all';
 let currentAccountsStatusFilter = 'all';
 let currentStatusFilter = 'all';
 let currentExpenseTypeFilter = 'all';
-let monthlyChart, productProfitChart, expenseTypeChart, salesBySourceChart, traderAnalysisChart;
+let currentRenewalFilter = 'all';
+let currentAdProductFilter = 'all';
+let monthlyChart, productProfitChart, expenseTypeChart, salesBySourceChart, traderAnalysisChart, adSpendChart, roasChart;
 let isDarkMode = localStorage.getItem('darkMode') === 'true';
-const PATH_SALES = 'sales', PATH_EXPENSES = 'expenses', PATH_ACCOUNTS = 'accounts', PATH_PRODUCTS = 'products', PATH_PROBLEMS = 'problems';
+const PATH_SALES = 'sales', PATH_EXPENSES = 'expenses', PATH_ACCOUNTS = 'accounts', PATH_PRODUCTS = 'products', PATH_PROBLEMS = 'problems', PATH_AD_CAMPAIGNS = 'ad_campaigns';
+
+// Shift definitions (24-hour format)
+const SHIFTS = {
+    NIGHT: { name: 'الشيفت الليلي', start: 0, end: 8, color: 'from-indigo-500 to-purple-600' },
+    MORNING: { name: 'شيفت الصباح', start: 8, end: 16, color: 'from-yellow-500 to-orange-500' },
+    EVENING: { name: 'الشيفت المسائي', start: 16, end: 24, color: 'from-blue-500 to-cyan-500' }
+};
 
 // --- UTILITY & SETUP FUNCTIONS ---
 const setupChartDefaults = () => {
@@ -888,7 +897,7 @@ const renderProductList = () => {
     container.innerHTML = allProducts.map(prod => `<div class="flex justify-between items-center p-2 bg-gray-100 rounded-md"><span class="font-semibold">${prod.name}</span><button data-id="${prod.id}" class="delete-product-btn text-red-400 hover:text-red-600"><i class="fa-solid fa-trash"></i></button></div>`).join('');
 };
 const populateProductDropdowns = () => {
-    const productDropdowns = document.querySelectorAll('.add-productName, #edit-productName, .add-account-productName, #edit-account-productName');
+    const productDropdowns = document.querySelectorAll('.add-productName, #edit-productName, .add-account-productName, #edit-account-productName, .ad-campaign-product');
     const optionsHTML = allProducts.map(p => `<option value="${p.name}">${p.name}</option>`).join('');
     productDropdowns.forEach(select => {
         const currentValue = select.value;
@@ -1158,6 +1167,79 @@ const setupEventListeners = () => {
         inventoryContainer.classList.toggle('hidden', isChecked);
         
         inventorySelect.required = !isChecked;
+    });
+
+    // Shifts date picker
+    shiftDatePicker = flatpickr("#shift-date-filter", {
+        dateFormat: "Y-m-d",
+        locale: "ar",
+        defaultDate: new Date(),
+        onChange: function(selectedDates) {
+            if (selectedDates.length > 0) {
+                renderShiftStatistics(selectedDates[0]);
+            }
+        }
+    });
+
+    // Today button for shifts
+    document.getElementById('shift-today-btn')?.addEventListener('click', () => {
+        if (shiftDatePicker) {
+            shiftDatePicker.setDate(new Date());
+            renderShiftStatistics(new Date());
+        }
+    });
+
+    // Renewal filters
+    document.body.addEventListener('click', (e) => {
+        const renewalFilterBtn = e.target.closest('.renewal-filter-btn');
+        if (renewalFilterBtn) {
+            currentRenewalFilter = renewalFilterBtn.dataset.filter;
+            document.querySelectorAll('.renewal-filter-btn').forEach(btn => btn.classList.remove('active'));
+            renewalFilterBtn.classList.add('active');
+            renderRenewalsTab();
+        }
+    });
+
+    // Ad campaign form toggle
+    document.getElementById('toggle-ad-campaign-form')?.addEventListener('click', () => {
+        document.getElementById('add-ad-campaign-container').classList.toggle('open');
+    });
+
+    // Ad campaign date pickers
+    adStartDatePicker = flatpickr(".ad-start-date", {
+        dateFormat: "Y-m-d",
+        locale: "ar"
+    });
+
+    adEndDatePicker = flatpickr(".ad-end-date", {
+        dateFormat: "Y-m-d",
+        locale: "ar"
+    });
+
+    // Ad product filters
+    document.body.addEventListener('click', (e) => {
+        const adProductFilter = e.target.closest('.ad-product-filter');
+        if (adProductFilter) {
+            currentAdProductFilter = adProductFilter.dataset.product;
+            document.querySelectorAll('.ad-product-filter').forEach(btn => btn.classList.remove('active'));
+            adProductFilter.classList.add('active');
+            renderAdvertisingSection();
+        }
+    });
+
+    // Delete ad campaign
+    document.body.addEventListener('click', async (e) => {
+        const deleteAdBtn = e.target.closest('.delete-ad-campaign-btn');
+        if (deleteAdBtn) {
+            if (confirm('هل أنت متأكد من حذف هذه الحملة الإعلانية؟')) {
+                try {
+                    await deleteDoc(doc(db, PATH_AD_CAMPAIGNS, deleteAdBtn.dataset.id));
+                    showNotification('تم حذف الحملة بنجاح', 'success');
+                } catch (error) {
+                    showNotification('حدث خطأ أثناء الحذف', 'danger');
+                }
+            }
+        }
     });
 };
 
@@ -1536,6 +1618,41 @@ const setupFormSubmissions = () => {
             submitBtn.disabled = false;
         }
      });
+
+    // Add advertising campaign form
+    document.getElementById('add-ad-campaign-form')?.addEventListener('submit', async e => {
+        e.preventDefault();
+        const form = e.target;
+        const submitBtn = form.querySelector('button[type="submit"]');
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'جاري الإضافة...';
+
+        try {
+            const formData = new FormData(form);
+            const startDate = formData.get('startDate');
+            const endDate = formData.get('endDate');
+
+            const campaignData = {
+                productName: formData.get('productName'),
+                platform: formData.get('platform'),
+                amount: parseFloat(formData.get('amount')),
+                notes: formData.get('notes') || '',
+                startDate: startDate ? { seconds: Math.floor(new Date(startDate).getTime() / 1000) } : serverTimestamp(),
+                endDate: endDate ? { seconds: Math.floor(new Date(endDate).getTime() / 1000) } : null,
+                createdAt: serverTimestamp()
+            };
+
+            await addDoc(collection(db, PATH_AD_CAMPAIGNS), campaignData);
+            showNotification('تمت إضافة الحملة الإعلانية بنجاح!', 'success');
+            form.reset();
+            document.getElementById('add-ad-campaign-container').classList.remove('open');
+        } catch (error) {
+            showNotification('حدث خطأ أثناء إضافة الحملة', 'danger');
+        } finally {
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'إضافة الحملة';
+        }
+    });
 };
 
 const setupDynamicEventListeners = () => {
@@ -1703,6 +1820,464 @@ async function checkAuthenticationOnLoad() {
     return true;
 }
 
+// --- SHIFTS STATISTICS FUNCTIONS ---
+function getShiftForTime(hour) {
+    if (hour >= SHIFTS.NIGHT.start && hour < SHIFTS.NIGHT.end) return 'NIGHT';
+    if (hour >= SHIFTS.MORNING.start && hour < SHIFTS.MORNING.end) return 'MORNING';
+    if (hour >= SHIFTS.EVENING.start && hour < SHIFTS.EVENING.end) return 'EVENING';
+    return 'EVENING'; // fallback
+}
+
+function calculateShiftStats(salesData, selectedDate) {
+    const startOfDay = new Date(selectedDate);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(selectedDate);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    const dayOrders = salesData.filter(sale => {
+        const saleDate = sale.date?.seconds ? new Date(sale.date.seconds * 1000) : null;
+        return saleDate && saleDate >= startOfDay && saleDate <= endOfDay;
+    });
+
+    const shiftData = {
+        NIGHT: { orders: [], revenue: 0, profit: 0, count: 0 },
+        MORNING: { orders: [], revenue: 0, profit: 0, count: 0 },
+        EVENING: { orders: [], revenue: 0, profit: 0, count: 0 }
+    };
+
+    dayOrders.forEach(sale => {
+        const saleDate = new Date(sale.date.seconds * 1000);
+        const hour = saleDate.getHours();
+        const shift = getShiftForTime(hour);
+        
+        shiftData[shift].orders.push(sale);
+        shiftData[shift].revenue += sale.sellingPrice || 0;
+        shiftData[shift].profit += (sale.sellingPrice || 0) - (sale.costPrice || 0);
+        shiftData[shift].count++;
+    });
+
+    return shiftData;
+}
+
+function renderShiftStatistics(date) {
+    const container = document.getElementById('shifts-statistics-container');
+    const shiftStats = calculateShiftStats(allSales, date);
+    
+    const totalDayOrders = Object.values(shiftStats).reduce((sum, shift) => sum + shift.count, 0);
+    const totalDayRevenue = Object.values(shiftStats).reduce((sum, shift) => sum + shift.revenue, 0);
+    const totalDayProfit = Object.values(shiftStats).reduce((sum, shift) => sum + shift.profit, 0);
+
+    let html = `
+        <div class="main-card p-6 mb-6">
+            <h3 class="text-2xl font-bold text-gray-800 mb-4">
+                <i class="fa-solid fa-calendar-day ml-2 text-indigo-600"></i>
+                ملخص ${date.toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+            </h3>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="stat-card bg-gradient-to-br from-green-500 to-emerald-600">
+                    <p class="font-semibold text-white/90">إجمالي الطلبات</p>
+                    <p class="text-4xl font-bold mt-2">${totalDayOrders}</p>
+                </div>
+                <div class="stat-card bg-gradient-to-br from-blue-500 to-indigo-600">
+                    <p class="font-semibold text-white/90">إجمالي الإيرادات</p>
+                    <p class="text-4xl font-bold mt-2">${totalDayRevenue.toFixed(2)} EGP</p>
+                </div>
+                <div class="stat-card bg-gradient-to-br from-purple-500 to-pink-600">
+                    <p class="font-semibold text-white/90">إجمالي الربح</p>
+                    <p class="text-4xl font-bold mt-2">${totalDayProfit.toFixed(2)} EGP</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    `;
+
+    Object.entries(SHIFTS).forEach(([key, shift]) => {
+        const data = shiftStats[key];
+        const percentage = totalDayOrders > 0 ? ((data.count / totalDayOrders) * 100).toFixed(1) : 0;
+        
+        html += `
+            <div class="shift-card">
+                <div class="shift-header">
+                    <div>
+                        <h4 class="text-xl font-bold text-gray-800">${shift.name}</h4>
+                        <p class="text-sm text-gray-600">${shift.start}:00 - ${shift.end}:00</p>
+                    </div>
+                    <div class="stat-card bg-gradient-to-br ${shift.color} px-4 py-2">
+                        <p class="text-3xl font-bold">${data.count}</p>
+                        <p class="text-xs text-white/80">طلبات</p>
+                    </div>
+                </div>
+                
+                <div class="shift-stats">
+                    <div class="shift-stat-item">
+                        <p class="text-xs text-gray-600 mb-1">النسبة المئوية</p>
+                        <p class="text-lg font-bold text-indigo-600">${percentage}%</p>
+                    </div>
+                    <div class="shift-stat-item">
+                        <p class="text-xs text-gray-600 mb-1">الإيرادات</p>
+                        <p class="text-lg font-bold text-green-600">${data.revenue.toFixed(2)}</p>
+                    </div>
+                    <div class="shift-stat-item">
+                        <p class="text-xs text-gray-600 mb-1">الربح</p>
+                        <p class="text-lg font-bold ${data.profit >= 0 ? 'text-emerald-600' : 'text-red-600'}">${data.profit.toFixed(2)}</p>
+                    </div>
+                    <div class="shift-stat-item">
+                        <p class="text-xs text-gray-600 mb-1">متوسط الربح/طلب</p>
+                        <p class="text-lg font-bold text-purple-600">${data.count > 0 ? (data.profit / data.count).toFixed(2) : '0.00'}</p>
+                    </div>
+                </div>
+
+                ${data.orders.length > 0 ? `
+                    <div class="mt-4 pt-4 border-t border-gray-300">
+                        <h5 class="font-semibold text-gray-700 mb-2">
+                            <i class="fa-solid fa-list ml-1"></i>
+                            الطلبات (${data.orders.length})
+                        </h5>
+                        <div class="space-y-2 max-h-64 overflow-y-auto">
+                            ${data.orders.map(order => {
+                                const orderTime = new Date(order.date.seconds * 1000);
+                                return `
+                                    <div class="bg-gray-50 p-2 rounded text-xs">
+                                        <div class="flex justify-between items-center">
+                                            <span class="font-semibold">${order.contactInfo || 'N/A'}</span>
+                                            <span class="text-gray-500">${orderTime.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}</span>
+                                        </div>
+                                        <div class="flex justify-between mt-1">
+                                            <span>${order.productName}</span>
+                                            <span class="font-bold text-green-600">${((order.sellingPrice || 0) - (order.costPrice || 0)).toFixed(2)} EGP</span>
+                                        </div>
+                                    </div>
+                                `;
+                            }).join('')}
+                        </div>
+                    </div>
+                ` : '<p class="text-center text-gray-500 mt-4">لا توجد طلبات في هذا الشيفت</p>'}
+            </div>
+        `;
+    });
+
+    html += '</div>';
+    container.innerHTML = html;
+}
+
+// --- RENEWALS SYSTEM FUNCTIONS ---
+function getRenewalData() {
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+
+    return allSales
+        .filter(sale => sale.isConfirmed && sale.subscription !== 'Lifetime')
+        .map(sale => {
+            const expiryDate = calculateExpiryDate(sale.date, sale.subscription);
+            const daysRemaining = calculateDaysRemaining(expiryDate);
+            
+            let category = 'normal';
+            if (daysRemaining < 0) category = 'expired';
+            else if (daysRemaining <= 3) category = 'urgent';
+            else if (daysRemaining <= 7) category = 'soon';
+
+            return {
+                ...sale,
+                expiryDate,
+                daysRemaining,
+                category,
+                renewalStatus: sale.renewalStatus || 'pending'
+            };
+        })
+        .sort((a, b) => (a.daysRemaining || 0) - (b.daysRemaining || 0));
+}
+
+function renderRenewalsTab() {
+    const container = document.getElementById('renewals-list-container');
+    let renewals = getRenewalData();
+
+    // Apply filter
+    if (currentRenewalFilter !== 'all') {
+        renewals = renewals.filter(r => r.category === currentRenewalFilter);
+    }
+
+    // Update renewal count badge
+    const urgentCount = renewals.filter(r => r.category === 'urgent' || r.category === 'expired').length;
+    const renewalCountBadge = document.getElementById('renewals-count');
+    if (renewalCountBadge) {
+        if (urgentCount > 0) {
+            renewalCountBadge.textContent = urgentCount;
+            renewalCountBadge.classList.remove('hidden');
+        } else {
+            renewalCountBadge.classList.add('hidden');
+        }
+    }
+
+    if (renewals.length === 0) {
+        container.innerHTML = '<p class="text-center py-10 text-gray-500">لا توجد تجديدات متاحة</p>';
+        return;
+    }
+
+    const groupedRenewals = {
+        expired: renewals.filter(r => r.category === 'expired'),
+        urgent: renewals.filter(r => r.category === 'urgent'),
+        soon: renewals.filter(r => r.category === 'soon'),
+        normal: renewals.filter(r => r.category === 'normal')
+    };
+
+    let html = '';
+    
+    Object.entries(groupedRenewals).forEach(([category, items]) => {
+        if (items.length === 0) return;
+
+        const categoryInfo = {
+            expired: { title: 'منتهية', icon: 'fa-times-circle', color: 'text-red-600' },
+            urgent: { title: 'عاجلة (خلال 3 أيام)', icon: 'fa-exclamation-triangle', color: 'text-orange-600' },
+            soon: { title: 'قريبة (خلال 7 أيام)', icon: 'fa-clock', color: 'text-yellow-600' },
+            normal: { title: 'عادية', icon: 'fa-check-circle', color: 'text-green-600' }
+        };
+
+        html += `
+            <div class="mb-6">
+                <h3 class="text-lg font-bold ${categoryInfo[category].color} mb-3 flex items-center">
+                    <i class="fa-solid ${categoryInfo[category].icon} ml-2"></i>
+                    ${categoryInfo[category].title} (${items.length})
+                </h3>
+                <div class="space-y-3">
+                    ${items.map(renewal => {
+                        const expiryDateStr = renewal.expiryDate ? 
+                            renewal.expiryDate.toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' }) : '-';
+                        
+                        const statusBadges = {
+                            pending: { text: 'في الانتظار', color: 'bg-gray-200 text-gray-800' },
+                            alerted: { text: 'تم التنبيه', color: 'bg-blue-200 text-blue-800' },
+                            renewed: { text: 'تم التجديد', color: 'bg-green-200 text-green-800' },
+                            'not-renewed': { text: 'لم يجدد', color: 'bg-red-200 text-red-800' }
+                        };
+
+                        const statusBadge = statusBadges[renewal.renewalStatus] || statusBadges.pending;
+
+                        return `
+                            <div class="main-card p-4 renewal-card ${category}">
+                                <div class="flex flex-wrap justify-between items-start gap-4">
+                                    <div class="flex-1 min-w-0">
+                                        <div class="flex items-center gap-2 mb-2">
+                                            <h4 class="font-bold text-gray-800">${renewal.contactInfo || 'N/A'}</h4>
+                                            <span class="px-2 py-1 text-xs font-semibold rounded-full ${statusBadge.color}">
+                                                ${statusBadge.text}
+                                            </span>
+                                        </div>
+                                        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                                            <div>
+                                                <p class="text-gray-600">المنتج</p>
+                                                <p class="font-semibold">${renewal.productName}</p>
+                                            </div>
+                                            <div>
+                                                <p class="text-gray-600">الاشتراك</p>
+                                                <p class="font-semibold">${renewal.subscription}</p>
+                                            </div>
+                                            <div>
+                                                <p class="text-gray-600">تاريخ الانتهاء</p>
+                                                <p class="font-semibold">${expiryDateStr}</p>
+                                            </div>
+                                            <div>
+                                                <p class="text-gray-600">الأيام المتبقية</p>
+                                                <p class="font-bold ${renewal.daysRemaining < 0 ? 'text-red-600' : 'text-green-600'}">
+                                                    ${renewal.daysRemaining < 0 ? 'منتهي' : renewal.daysRemaining + ' يوم'}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="flex flex-wrap gap-2">
+                                        ${renewal.renewalStatus === 'pending' ? `
+                                            <button class="renewal-action-btn primary-btn text-xs py-1 px-3 bg-blue-600 hover:bg-blue-700" data-id="${renewal.id}" data-action="alerted">
+                                                <i class="fa-solid fa-bell ml-1"></i>تم التنبيه
+                                            </button>
+                                        ` : ''}
+                                        ${renewal.renewalStatus === 'alerted' || renewal.renewalStatus === 'pending' ? `
+                                            <button class="renewal-action-btn primary-btn text-xs py-1 px-3 bg-green-600 hover:bg-green-700" data-id="${renewal.id}" data-action="renewed">
+                                                <i class="fa-solid fa-check ml-1"></i>تم التجديد
+                                            </button>
+                                            <button class="renewal-action-btn primary-btn text-xs py-1 px-3 bg-red-600 hover:bg-red-700" data-id="${renewal.id}" data-action="not-renewed">
+                                                <i class="fa-solid fa-times ml-1"></i>لم يجدد
+                                            </button>
+                                        ` : ''}
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            </div>
+        `;
+    });
+
+    container.innerHTML = html;
+}
+
+// --- ADVERTISING FUNCTIONS ---
+function renderAdvertisingSection() {
+    renderAdCampaignsTable();
+    renderAdCharts();
+}
+
+function renderAdCampaignsTable() {
+    const tbody = document.getElementById('ad-campaigns-tbody');
+    let campaigns = [...allAdCampaigns];
+
+    // Apply product filter
+    if (currentAdProductFilter !== 'all') {
+        campaigns = campaigns.filter(c => c.productName === currentAdProductFilter);
+    }
+
+    if (campaigns.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center py-10 text-gray-500">لا توجد حملات إعلانية</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = campaigns.map(campaign => {
+        const startDate = campaign.startDate?.seconds ? 
+            new Date(campaign.startDate.seconds * 1000).toLocaleDateString('ar-EG') : '-';
+        const endDate = campaign.endDate?.seconds ? 
+            new Date(campaign.endDate.seconds * 1000).toLocaleDateString('ar-EG') : 'مستمرة';
+
+        const platformClass = `platform-${campaign.platform.toLowerCase()}`;
+
+        return `
+            <tr class="ad-campaign-row">
+                <td class="px-4 py-3" data-label="المنتج">
+                    <span class="font-semibold text-gray-800">${campaign.productName}</span>
+                </td>
+                <td class="px-4 py-3" data-label="المنصة">
+                    <span class="platform-badge ${platformClass}">${campaign.platform}</span>
+                </td>
+                <td class="px-4 py-3" data-label="المبلغ">
+                    <span class="font-bold text-purple-600">${campaign.amount.toFixed(2)} EGP</span>
+                </td>
+                <td class="px-4 py-3" data-label="التاريخ">
+                    <div class="text-sm">
+                        <p>${startDate}</p>
+                        <p class="text-gray-500 text-xs">${endDate}</p>
+                    </div>
+                </td>
+                <td class="px-4 py-3" data-label="الإجراءات">
+                    <div class="flex gap-2">
+                        <button class="text-red-500 hover:text-red-700 delete-ad-campaign-btn" data-id="${campaign.id}">
+                            <i class="fa-solid fa-trash"></i>
+                        </button>
+                    </div>
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
+function renderAdCharts() {
+    // Ad Spend by Product Chart
+    const adSpendByProduct = {};
+    allAdCampaigns.forEach(campaign => {
+        if (!adSpendByProduct[campaign.productName]) {
+            adSpendByProduct[campaign.productName] = 0;
+        }
+        adSpendByProduct[campaign.productName] += campaign.amount || 0;
+    });
+
+    const adSpendCtx = document.getElementById('ad-spend-by-product-chart')?.getContext('2d');
+    if (adSpendCtx) {
+        if (adSpendChart) adSpendChart.destroy();
+        
+        adSpendChart = new Chart(adSpendCtx, {
+            type: 'doughnut',
+            data: {
+                labels: Object.keys(adSpendByProduct),
+                datasets: [{
+                    data: Object.values(adSpendByProduct),
+                    backgroundColor: ['#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#ef4444']
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'bottom' },
+                    tooltip: {
+                        callbacks: {
+                            label: (context) => `${context.label}: ${context.parsed.toFixed(2)} EGP`
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    // ROAS by Product Chart
+    const roasByProduct = {};
+    allProducts.forEach(product => {
+        const productSales = allSales.filter(s => s.isConfirmed && s.productName === product.name);
+        const productAdSpend = allAdCampaigns
+            .filter(c => c.productName === product.name)
+            .reduce((sum, c) => sum + (c.amount || 0), 0);
+        const productRevenue = productSales.reduce((sum, s) => sum + (s.sellingPrice || 0), 0);
+        
+        if (productAdSpend > 0) {
+            roasByProduct[product.name] = productRevenue / productAdSpend;
+        }
+    });
+
+    const roasCtx = document.getElementById('roas-by-product-chart')?.getContext('2d');
+    if (roasCtx) {
+        if (roasChart) roasChart.destroy();
+        
+        roasChart = new Chart(roasCtx, {
+            type: 'bar',
+            data: {
+                labels: Object.keys(roasByProduct),
+                datasets: [{
+                    label: 'ROAS',
+                    data: Object.values(roasByProduct),
+                    backgroundColor: '#10b981',
+                    borderColor: '#059669',
+                    borderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            callback: (value) => value.toFixed(2) + 'x'
+                        }
+                    }
+                },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: (context) => `ROAS: ${context.parsed.y.toFixed(2)}x`
+                        }
+                    }
+                }
+            }
+        });
+    }
+}
+
+function updateAdProductFilters() {
+    const container = document.querySelector('.ad-product-filter')?.parentElement;
+    if (!container) return;
+    
+    container.innerHTML = '<button class="filter-btn active ad-product-filter" data-product="all">كل المنتجات</button>';
+    
+    allProducts.forEach(product => {
+        const count = allAdCampaigns.filter(c => c.productName === product.name).length;
+        if (count > 0) {
+            const btn = document.createElement('button');
+            btn.className = 'filter-btn ad-product-filter';
+            btn.dataset.product = product.name;
+            btn.textContent = `${product.name} (${count})`;
+            container.appendChild(btn);
+        }
+    });
+}
+
 // --- APP INITIALIZATION ---
 async function initializeAppAndListeners() {
     // Check authentication immediately
@@ -1745,12 +2320,13 @@ async function initializeAppAndListeners() {
 
     // Fetch initial data to show the UI quickly, then set up real-time listeners
     try {
-        const [salesSnap, expensesSnap, accountsSnap, productsSnap, problemsSnap] = await Promise.all([
+        const [salesSnap, expensesSnap, accountsSnap, productsSnap, problemsSnap, adCampaignsSnap] = await Promise.all([
             getDocs(query(collection(db, PATH_SALES), orderBy("date", "desc"))),
             getDocs(query(collection(db, PATH_EXPENSES), orderBy("date", "desc"))),
             getDocs(query(collection(db, PATH_ACCOUNTS), orderBy("purchase_date", "desc"))),
             getDocs(query(collection(db, PATH_PRODUCTS), orderBy("name"))),
-            getDocs(query(collection(db, PATH_PROBLEMS), orderBy("date", "desc")))
+            getDocs(query(collection(db, PATH_PROBLEMS), orderBy("date", "desc"))),
+            getDocs(query(collection(db, PATH_AD_CAMPAIGNS), orderBy("createdAt", "desc"))).catch(() => ({ docs: [] }))
         ]);
 
         allSales = salesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -1758,10 +2334,16 @@ async function initializeAppAndListeners() {
         allAccounts = accountsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
         allProducts = productsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
         allProblems = problemsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        allAdCampaigns = adCampaignsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
 
         populateProductDropdowns();
         renderProductList();
         renderData();
+        renderAdvertisingSection();
+        updateAdProductFilters();
+        
+        // Initialize shift statistics with today's date
+        renderShiftStatistics(new Date());
         
         document.getElementById('dashboard-loader').classList.add('hidden');
         document.getElementById('dashboard-content').classList.remove('hidden');
@@ -1771,11 +2353,30 @@ async function initializeAppAndListeners() {
         document.getElementById('dashboard-loader').innerHTML = `<p class="text-red-500">فشل الاتصال بقاعدة البيانات. الرجاء تحديث الصفحة.</p>`;
     }
 
-    onSnapshot(query(collection(db, PATH_SALES), orderBy("date", "desc")), snap => { allSales = snap.docs.map(d => ({ id: d.id, ...d.data() })); renderData(); });
+    onSnapshot(query(collection(db, PATH_SALES), orderBy("date", "desc")), snap => { 
+        allSales = snap.docs.map(d => ({ id: d.id, ...d.data() })); 
+        renderData(); 
+        renderRenewalsTab();
+        if (shiftDatePicker && shiftDatePicker.selectedDates.length > 0) {
+            renderShiftStatistics(shiftDatePicker.selectedDates[0]);
+        }
+    });
     onSnapshot(query(collection(db, PATH_EXPENSES), orderBy("date", "desc")), snap => { allExpenses = snap.docs.map(d => ({ id: d.id, ...d.data() })); renderData(); });
     onSnapshot(query(collection(db, PATH_ACCOUNTS), orderBy("purchase_date", "desc")), snap => { allAccounts = snap.docs.map(d => ({ id: d.id, ...d.data() })); renderData(); });
-    onSnapshot(query(collection(db, PATH_PRODUCTS), orderBy("name")), snap => { allProducts = snap.docs.map(d => ({ id: d.id, ...d.data() })); populateProductDropdowns(); renderProductList(); renderData(); });
+    onSnapshot(query(collection(db, PATH_PRODUCTS), orderBy("name")), snap => { 
+        allProducts = snap.docs.map(d => ({ id: d.id, ...d.data() })); 
+        populateProductDropdowns(); 
+        renderProductList(); 
+        renderData();
+        updateAdProductFilters();
+    });
     onSnapshot(query(collection(db, PATH_PROBLEMS), orderBy("date", "desc")), snap => { allProblems = snap.docs.map(d => ({ id: d.id, ...d.data() })); renderData(); });
+    onSnapshot(query(collection(db, PATH_AD_CAMPAIGNS), orderBy("createdAt", "desc")), snap => { 
+        allAdCampaigns = snap.docs.map(d => ({ id: d.id, ...d.data() })); 
+        renderAdvertisingSection();
+        updateAdProductFilters();
+        renderData(); // To update ROAS calculations in dashboard
+    });
 }
 
 initializeAppAndListeners();
