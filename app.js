@@ -78,6 +78,12 @@ const SHIFTS = {
 
 // --- UTILITY & SETUP FUNCTIONS ---
 const setupChartDefaults = () => {
+    // Check if Chart.js is loaded
+    if (typeof Chart === 'undefined') {
+        console.warn('Chart.js لم يتم تحميله بعد');
+        return;
+    }
+    
     Chart.defaults.font.family = "'Cairo', sans-serif";
     Chart.defaults.font.weight = '600';
     Chart.defaults.color = isDarkMode ? '#94a3b8' : '#64748b';
@@ -1153,44 +1159,49 @@ const setupEventListeners = () => {
         });
     });
 
-    flatpickrInstance = flatpickr("#date-range-filter", {
-        mode: "range", dateFormat: "Y-m-d", locale: "ar",
-        onChange: function(selectedDates) {
-            if (selectedDates.length === 0) { dateRangeStart = null; dateRangeEnd = null; } 
-            else if (selectedDates.length === 1) {
-                dateRangeStart = new Date(selectedDates[0].setHours(0, 0, 0, 0));
-                dateRangeEnd = new Date(selectedDates[0].setHours(23, 59, 59, 999));
-            } else {
-                dateRangeStart = new Date(selectedDates[0].setHours(0, 0, 0, 0));
-                dateRangeEnd = new Date(selectedDates[1].setHours(23, 59, 59, 999));
+    // Check if flatpickr is loaded before initializing date pickers
+    if (typeof flatpickr !== 'undefined') {
+        flatpickrInstance = flatpickr("#date-range-filter", {
+            mode: "range", dateFormat: "Y-m-d", locale: "ar",
+            onChange: function(selectedDates) {
+                if (selectedDates.length === 0) { dateRangeStart = null; dateRangeEnd = null; } 
+                else if (selectedDates.length === 1) {
+                    dateRangeStart = new Date(selectedDates[0].setHours(0, 0, 0, 0));
+                    dateRangeEnd = new Date(selectedDates[0].setHours(23, 59, 59, 999));
+                } else {
+                    dateRangeStart = new Date(selectedDates[0].setHours(0, 0, 0, 0));
+                    dateRangeEnd = new Date(selectedDates[1].setHours(23, 59, 59, 999));
+                }
+                renderData();
             }
-            renderData();
-        }
-    });
-    document.getElementById('clear-date-filter-btn').addEventListener('click', () => { if(flatpickrInstance) flatpickrInstance.clear(); });
-    
-    // Expense date range filter
-    expenseFlatpickrInstance = flatpickr("#expense-date-range-filter", {
-        mode: "range", dateFormat: "Y-m-d", locale: "ar",
-        onChange: function(selectedDates) {
-            if (selectedDates.length === 0) { expenseDateRangeStart = null; expenseDateRangeEnd = null; } 
-            else if (selectedDates.length === 1) {
-                expenseDateRangeStart = new Date(selectedDates[0].setHours(0, 0, 0, 0));
-                expenseDateRangeEnd = new Date(selectedDates[0].setHours(23, 59, 59, 999));
-            } else {
-                expenseDateRangeStart = new Date(selectedDates[0].setHours(0, 0, 0, 0));
-                expenseDateRangeEnd = new Date(selectedDates[1].setHours(23, 59, 59, 999));
+        });
+        document.getElementById('clear-date-filter-btn').addEventListener('click', () => { if(flatpickrInstance) flatpickrInstance.clear(); });
+        
+        // Expense date range filter
+        expenseFlatpickrInstance = flatpickr("#expense-date-range-filter", {
+            mode: "range", dateFormat: "Y-m-d", locale: "ar",
+            onChange: function(selectedDates) {
+                if (selectedDates.length === 0) { expenseDateRangeStart = null; expenseDateRangeEnd = null; } 
+                else if (selectedDates.length === 1) {
+                    expenseDateRangeStart = new Date(selectedDates[0].setHours(0, 0, 0, 0));
+                    expenseDateRangeEnd = new Date(selectedDates[0].setHours(23, 59, 59, 999));
+                } else {
+                    expenseDateRangeStart = new Date(selectedDates[0].setHours(0, 0, 0, 0));
+                    expenseDateRangeEnd = new Date(selectedDates[1].setHours(23, 59, 59, 999));
+                }
+                renderData();
             }
-            renderData();
-        }
-    });
-    document.getElementById('clear-expense-date-filter-btn').addEventListener('click', () => { if(expenseFlatpickrInstance) expenseFlatpickrInstance.clear(); });
-    
-    // Custom date picker for add sale form
-    flatpickr("#add-custom-date", { dateFormat: "Y-m-d", locale: "ar" });
-    
-    // Custom date picker for add expense form
-    flatpickr("#add-expense-custom-date", { dateFormat: "Y-m-d", locale: "ar" });
+        });
+        document.getElementById('clear-expense-date-filter-btn').addEventListener('click', () => { if(expenseFlatpickrInstance) expenseFlatpickrInstance.clear(); });
+        
+        // Custom date picker for add sale form
+        flatpickr("#add-custom-date", { dateFormat: "Y-m-d", locale: "ar" });
+        
+        // Custom date picker for add expense form
+        flatpickr("#add-expense-custom-date", { dateFormat: "Y-m-d", locale: "ar" });
+    } else {
+        console.warn('Flatpickr لم يتم تحميله بعد');
+    }
     
     document.getElementById('export-sales-btn').addEventListener('click', exportSalesToExcel);
 
@@ -1283,16 +1294,18 @@ const setupEventListeners = () => {
     });
 
     // Shifts date picker
-    shiftDatePicker = flatpickr("#shift-date-filter", {
-        dateFormat: "Y-m-d",
-        locale: "ar",
-        defaultDate: new Date(),
-        onChange: function(selectedDates) {
-            if (selectedDates.length > 0) {
-                renderShiftStatistics(selectedDates[0]);
+    if (typeof flatpickr !== 'undefined') {
+        shiftDatePicker = flatpickr("#shift-date-filter", {
+            dateFormat: "Y-m-d",
+            locale: "ar",
+            defaultDate: new Date(),
+            onChange: function(selectedDates) {
+                if (selectedDates.length > 0) {
+                    renderShiftStatistics(selectedDates[0]);
+                }
             }
-        }
-    });
+        });
+    }
 
     // Today button for shifts
     document.getElementById('shift-today-btn')?.addEventListener('click', () => {
@@ -1319,15 +1332,17 @@ const setupEventListeners = () => {
     });
 
     // Ad campaign date pickers
-    adStartDatePicker = flatpickr(".ad-start-date", {
-        dateFormat: "Y-m-d",
-        locale: "ar"
-    });
+    if (typeof flatpickr !== 'undefined') {
+        adStartDatePicker = flatpickr(".ad-start-date", {
+            dateFormat: "Y-m-d",
+            locale: "ar"
+        });
 
-    adEndDatePicker = flatpickr(".ad-end-date", {
-        dateFormat: "Y-m-d",
-        locale: "ar"
-    });
+        adEndDatePicker = flatpickr(".ad-end-date", {
+            dateFormat: "Y-m-d",
+            locale: "ar"
+        });
+    }
 
     // Ad product filters
     document.body.addEventListener('click', (e) => {
