@@ -12,9 +12,9 @@
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;800;900&display=swap');
         :root {
-            --primary-color: #4f46e5;
+            --primary-color: #6366f1;
             --primary-color-light: #e0e7ff;
             --background-color: #f8fafc;
             --card-background: #ffffff;
@@ -23,8 +23,8 @@
             --border-color: #e2e8f0;
         }
         body {
-            font-family: 'Cairo', sans-serif;
-            background-color: var(--background-color);
+            font-family: 'Tajawal', sans-serif;
+            background: linear-gradient(135deg, #f8fafc 0%, #e0e7ff 100%);
             color: var(--text-primary);
         }
         .container { max-width: 1600px; margin: 0 auto; padding: 0 1rem; }
@@ -176,11 +176,17 @@
     <div id="notification"></div>
 
     <main class="container">
-        <header class="main-card mb-8">
-            <div class="p-4 sm:p-6 flex flex-wrap justify-between items-center gap-4 border-b border-b-[var(--border-color)]">
-                <div>
-                    <h1 class="text-3xl font-bold text-gray-800">SubPro Dashboard</h1>
-                    <p class="text-gray-500 mt-1">نظرة شاملة على أداء مشروعك المالي.</p>
+        <header class="main-card mb-8 relative overflow-hidden">
+            <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500"></div>
+            <div class="p-5 sm:p-7 flex flex-wrap justify-between items-center gap-4 border-b border-b-[var(--border-color)]">
+                <div class="flex items-center gap-4">
+                    <div class="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg">
+                        <i class="fas fa-crown text-white text-2xl"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-3xl sm:text-4xl font-black bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">نظام SubPro الاحترافي</h1>
+                        <p class="text-sm sm:text-base text-gray-600 mt-1 font-medium">إدارة متكاملة للاشتراكات، الطلبات، والإحصائيات المتقدمة 📊</p>
+                    </div>
                 </div>
             </div>
             <nav class="flex flex-wrap">
