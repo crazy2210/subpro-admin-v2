@@ -3,6 +3,10 @@ import { getAuth, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/fire
 import { getFirestore, doc, onSnapshot, collection, query, addDoc, deleteDoc, serverTimestamp, orderBy, updateDoc, runTransaction, writeBatch, getDocs, getDoc, enableIndexedDbPersistence, enableNetwork, disableNetwork } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { initAuth, hasPermission, PERMISSIONS, logout, applyUIRestrictions, checkSectionAccess, showUnauthorizedAccessMessage } from './auth.js';
 import { initUserManagement } from './users-management.js';
+// Import new enhancement modules
+import { initShiftReportsUI, generateShiftReport, getCurrentShift } from './shift-reports.js';
+import { exportSalesToExcel, exportAccountsToExcel, exportExpensesToExcel, exportStatisticsToExcel, exportShiftReportToExcel } from './export-manager.js';
+import { initEnhancedAccountsManagement, generateAccountId } from './accounts-manager.js';
 
 const firebaseConfig = {
     apiKey: "AIzaSyAmO9EZt_56rqEdBqxkyJW8ROZDWQ-LDAU",
