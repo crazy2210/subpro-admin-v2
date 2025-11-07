@@ -3,6 +3,18 @@ import { getAuth, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/fire
 import { getFirestore, doc, onSnapshot, collection, query, addDoc, deleteDoc, serverTimestamp, orderBy, updateDoc, runTransaction, writeBatch, getDocs, getDoc, enableIndexedDbPersistence, enableNetwork, disableNetwork } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { initAuth, hasPermission, PERMISSIONS, logout, applyUIRestrictions, checkSectionAccess, showUnauthorizedAccessMessage } from './auth.js';
 import { initUserManagement } from './users-management.js';
+import { 
+    exportShiftReportToExcel, 
+    exportDailySummaryToExcel, 
+    exportComprehensiveBackup,
+    generateShiftReportText,
+    scheduleAutomaticShiftReports,
+    copyToClipboard,
+    detectDuplicateAccounts,
+    detectInactiveAccounts,
+    exportAccountsToExcel,
+    getAccountStatusBadge
+} from './automation.js';
 
 const firebaseConfig = {
     apiKey: "AIzaSyAmO9EZt_56rqEdBqxkyJW8ROZDWQ-LDAU",
@@ -457,6 +469,61 @@ const updateDashboard = (salesData, expensesData, allSalesData, allProblemsData,
             <p class="text-3xl font-bold mt-2">${monthlySalesCount}</p>
         </div>
     `;
+    
+    // Update Enhanced Dashboard Header
+    updateEnhancedDashboardHeader(allSalesData, allAccountsData);
+};
+
+// Update Enhanced Dashboard Header with live stats
+const updateEnhancedDashboardHeader = (allSalesData, allAccountsData) => {
+    const now = new Date();
+    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    
+    // Active Subscriptions (non-expired confirmed sales)
+    const activeSubscriptions = allSalesData.filter(sale => {
+        if (!sale.isConfirmed) return false;
+        if (sale.subscription === 'Lifetime') return true;
+        const expiryDate = calculateExpiryDate(sale.date, sale.subscription);
+        return expiryDate && expiryDate > now;
+    }).length;
+    
+    // Daily Sales (revenue)
+    const dailySales = allSalesData
+        .filter(s => s.isConfirmed && (s.date?.seconds * 1000) >= startOfDay.getTime())
+        .reduce((sum, s) => sum + (s.sellingPrice || 0), 0);
+    
+    // Pending Renewals (expiring in next 7 days)
+    const pendingRenewals = allSalesData.filter(sale => {
+        if (!sale.isConfirmed || sale.subscription === 'Lifetime') return false;
+        const expiryDate = calculateExpiryDate(sale.date, sale.subscription);
+        const daysRemaining = calculateDaysRemaining(expiryDate);
+        return daysRemaining !== null && daysRemaining >= 0 && daysRemaining <= 7;
+    }).length;
+    
+    // Daily Profit
+    const dailyProfit = allSalesData
+        .filter(s => s.isConfirmed && (s.date?.seconds * 1000) >= startOfDay.getTime())
+        .reduce((sum, s) => sum + ((s.sellingPrice || 0) - (s.costPrice || 0)), 0);
+    
+    // Update header elements
+    document.getElementById('header-active-subs').textContent = activeSubscriptions;
+    document.getElementById('header-daily-sales').textContent = `${dailySales.toFixed(2)} EGP`;
+    document.getElementById('header-pending-renewals').textContent = pendingRenewals;
+    document.getElementById('header-daily-profit').textContent = `${dailyProfit.toFixed(2)} EGP`;
+    
+    // Update last update time
+    const lastUpdate = now.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
+    document.getElementById('header-last-update').textContent = `آخر تحديث: ${lastUpdate}`;
+    
+    // Update system status based on connection
+    const statusElement = document.getElementById('header-system-status');
+    if (isConnected) {
+        statusElement.textContent = 'متصل ✓';
+        statusElement.className = 'text-xs font-semibold text-green-600 mt-1';
+    } else {
+        statusElement.textContent = 'غير متصل';
+        statusElement.className = 'text-xs font-semibold text-red-600 mt-1';
+    }
 };
 
 const updateSalesTable = (salesData) => {
@@ -763,28 +830,91 @@ const updateProblemsTable = (problemsData) => {
 const updateAccountsTable = (accountsData) => {
      const table = document.getElementById('accounts-table');
      table.innerHTML = ''; 
-     if (accountsData.length === 0) { table.innerHTML = `<tbody><tr><td colspan="8" class="text-center py-10 text-gray-500">لا توجد أكونتات لعرضها.</td></tr></tbody>`; return; }
+     
+     // Update account status counters
+     const availableCount = allAccounts.filter(a => a.is_active && a.current_uses < a.allowed_uses).length;
+     const inUseCount = allAccounts.filter(a => a.is_active && a.current_uses > 0 && a.current_uses < a.allowed_uses).length;
+     const fullCount = allAccounts.filter(a => a.current_uses >= a.allowed_uses && a.allowed_uses !== Infinity).length;
+     const inactiveCount = allAccounts.filter(a => !a.is_active).length;
+     
+     document.getElementById('accounts-available-count').textContent = availableCount;
+     document.getElementById('accounts-in-use-count').textContent = inUseCount;
+     document.getElementById('accounts-full-count').textContent = fullCount;
+     document.getElementById('accounts-inactive-count').textContent = inactiveCount;
+     
+     if (accountsData.length === 0) { 
+        table.innerHTML = `<tbody><tr><td colspan="9" class="text-center py-10 text-gray-500">لا توجد أكونتات لعرضها.</td></tr></tbody>`; 
+        return; 
+     }
+     
      const thead = document.createElement('thead');
      thead.className = 'bg-gray-100';
-     thead.innerHTML = `<tr><th class="px-3 py-3 text-right text-xs font-bold text-gray-600 uppercase">تاريخ الشراء</th><th class="px-3 py-3 text-right text-xs font-bold text-gray-600 uppercase">الإيميل</th><th class="px-3 py-3 text-right text-xs font-bold text-gray-600 uppercase">المنتج</th><th class="px-3 py-3 text-right text-xs font-bold text-gray-600 uppercase">التاجر</th><th class="px-3 py-3 text-right text-xs font-bold text-gray-600 uppercase">التكلفة</th><th class="px-3 py-3 text-right text-xs font-bold text-gray-600 uppercase">الاستخدام</th><th class="px-3 py-3 text-right text-xs font-bold text-gray-600 uppercase">الحالة</th><th class="px-3 py-3"></th></tr>`;
+     thead.innerHTML = `<tr>
+        <th class="px-3 py-3 text-right text-xs font-bold text-gray-600 uppercase">ID</th>
+        <th class="px-3 py-3 text-right text-xs font-bold text-gray-600 uppercase">تاريخ الشراء</th>
+        <th class="px-3 py-3 text-right text-xs font-bold text-gray-600 uppercase">الإيميل</th>
+        <th class="px-3 py-3 text-right text-xs font-bold text-gray-600 uppercase">المنتج</th>
+        <th class="px-3 py-3 text-right text-xs font-bold text-gray-600 uppercase">التاجر</th>
+        <th class="px-3 py-3 text-right text-xs font-bold text-gray-600 uppercase">التكلفة</th>
+        <th class="px-3 py-3 text-right text-xs font-bold text-gray-600 uppercase">الاستخدام</th>
+        <th class="px-3 py-3 text-right text-xs font-bold text-gray-600 uppercase">الحالة</th>
+        <th class="px-3 py-3"></th>
+     </tr>`;
      table.appendChild(thead);
+     
      const tbody = document.createElement('tbody');
      tbody.className = 'bg-white divide-y divide-gray-200';
+     
      accountsData.forEach(acc => {
          const row = document.createElement('tr');
-         let statusHTML, usageDisplayHTML;
-         if (!acc.is_active) { statusHTML = `<div class="flex items-center"><span class="h-2 w-2 ml-2 rounded-full bg-red-500"></span><span>غير نشط</span></div>`; }
-         else if (acc.current_uses >= acc.allowed_uses && acc.allowed_uses !== Infinity) { statusHTML = `<div class="flex items-center"><span class="h-2 w-2 ml-2 rounded-full bg-green-500"></span><span>مكتمل</span></div>`; }
-         else if (acc.current_uses > 0) { statusHTML = `<div class="flex items-center"><span class="h-2 w-2 ml-2 rounded-full bg-yellow-500"></span><span>مستخدم</span></div>`; }
-         else { statusHTML = `<div class="flex items-center"><span class="h-2 w-2 ml-2 rounded-full bg-sky-500"></span><span>جديد</span></div>`; }
-         if (acc.allowed_uses === Infinity) { usageDisplayHTML = `<span class="font-semibold">${acc.current_uses} / ∞</span>`; }
-         else if (acc.allowed_uses > 0) {
+         row.className = 'hover:bg-gray-50 transition-colors';
+         
+         // Get status badge using automation module
+         const statusBadge = getAccountStatusBadge(acc);
+         const statusHTML = `<span class="px-2 py-1 text-xs font-semibold rounded-full ${statusBadge.bgColor} ${statusBadge.textColor}">
+            <i class="fas ${statusBadge.icon} ml-1"></i>${statusBadge.text}
+         </span>`;
+         
+         // Usage display with progress bar
+         let usageDisplayHTML;
+         if (acc.allowed_uses === Infinity) { 
+            usageDisplayHTML = `<span class="font-semibold">${acc.current_uses} / ∞</span>`; 
+         } else if (acc.allowed_uses > 0) {
              const percentage = Math.min(100, Math.round((acc.current_uses / acc.allowed_uses) * 100));
-             let barColor = percentage >= 100 ? 'bg-green-500' : (percentage === 0 ? 'bg-sky-500' : 'bg-yellow-500');
-             usageDisplayHTML = `<div class="flex items-center w-full"><span class="text-sm font-medium text-gray-700 ml-3 w-16">${acc.current_uses} / ${acc.allowed_uses}</span><div class="w-full bg-gray-200 rounded-full h-2.5"><div class="${barColor} h-2.5 rounded-full" style="width: ${percentage}%"></div></div><span class="text-sm font-medium text-gray-700 mr-2 w-10 text-left">${percentage}%</span></div>`;
-         } else { usageDisplayHTML = '<span>-</span>'; }
+             let barColor = percentage >= 100 ? 'bg-red-500' : (percentage >= 80 ? 'bg-orange-500' : (percentage === 0 ? 'bg-blue-500' : 'bg-green-500'));
+             usageDisplayHTML = `<div class="flex items-center w-full">
+                <span class="text-sm font-medium text-gray-700 ml-3 w-16">${acc.current_uses} / ${acc.allowed_uses}</span>
+                <div class="w-full bg-gray-200 rounded-full h-2.5">
+                    <div class="${barColor} h-2.5 rounded-full transition-all" style="width: ${percentage}%"></div>
+                </div>
+                <span class="text-sm font-medium text-gray-700 mr-2 w-10 text-left">${percentage}%</span>
+             </div>`;
+         } else { 
+            usageDisplayHTML = '<span>-</span>'; 
+         }
+         
          const purchaseDate = acc.purchase_date?.seconds ? new Date(acc.purchase_date.seconds * 1000).toLocaleDateString('ar-EG') : 'غير محدد';
-         row.innerHTML = `<td data-label="تاريخ الشراء" class="text-gray-600">${purchaseDate}</td><td data-label="الإيميل" class="font-bold text-gray-800">${acc.email}</td><td data-label="المنتج" class="text-gray-800">${acc.productName || '-'}</td><td data-label="التاجر" class="text-gray-600">${acc.trader_name}</td><td data-label="التكلفة" class="font-semibold text-gray-700">${(acc.purchase_price || 0).toFixed(2)}</td><td data-label="الاستخدام">${usageDisplayHTML}</td><td data-label="الحالة">${statusHTML}</td><td data-label="إجراءات"><div class="flex gap-4 justify-end"><button data-id="${acc.id}" class="edit-account-btn text-blue-500 hover:text-blue-700 font-semibold">تعديل</button><button data-id="${acc.id}" class="delete-account-btn text-red-500 hover:text-red-700 font-semibold">حذف</button></div></td>`;
+         const accountId = acc.id ? acc.id.substring(0, 8) : 'N/A';
+         
+         row.innerHTML = `
+            <td data-label="ID" class="text-gray-500 font-mono text-xs">${accountId}</td>
+            <td data-label="تاريخ الشراء" class="text-gray-600">${purchaseDate}</td>
+            <td data-label="الإيميل" class="font-bold text-gray-800 copyable" onclick="navigator.clipboard.writeText('${acc.email}'); showNotification('تم نسخ الإيميل', 'success')">${acc.email}</td>
+            <td data-label="المنتج" class="text-gray-800">${acc.productName || '-'}</td>
+            <td data-label="التاجر" class="text-gray-600">${acc.trader_name}</td>
+            <td data-label="التكلفة" class="font-semibold text-gray-700">${(acc.purchase_price || 0).toFixed(2)} EGP</td>
+            <td data-label="الاستخدام">${usageDisplayHTML}</td>
+            <td data-label="الحالة">${statusHTML}</td>
+            <td data-label="إجراءات">
+                <div class="flex gap-2 justify-end">
+                    <button data-id="${acc.id}" class="edit-account-btn text-blue-500 hover:text-blue-700 font-semibold text-sm">
+                        <i class="fas fa-edit"></i> تعديل
+                    </button>
+                    <button data-id="${acc.id}" class="delete-account-btn text-red-500 hover:text-red-700 font-semibold text-sm">
+                        <i class="fas fa-trash"></i> حذف
+                    </button>
+                </div>
+            </td>`;
          tbody.appendChild(row);
      });
      table.appendChild(tbody);
@@ -1282,8 +1412,8 @@ const setupEventListeners = () => {
         inventorySelect.required = !isChecked;
     });
 
-    // Shifts date picker
-    shiftDatePicker = flatpickr("#shift-date-filter", {
+    // Shifts date picker - updated for new UI
+    shiftDatePicker = flatpickr("#shift-date-picker", {
         dateFormat: "Y-m-d",
         locale: "ar",
         defaultDate: new Date(),
@@ -1294,11 +1424,157 @@ const setupEventListeners = () => {
         }
     });
 
+    // Backward compatibility for old shift date filter
+    const oldShiftFilter = document.getElementById('shift-date-filter');
+    if (oldShiftFilter) {
+        flatpickr("#shift-date-filter", {
+            dateFormat: "Y-m-d",
+            locale: "ar",
+            defaultDate: new Date(),
+            onChange: function(selectedDates) {
+                if (selectedDates.length > 0) {
+                    renderShiftStatistics(selectedDates[0]);
+                }
+            }
+        });
+    }
+
     // Today button for shifts
     document.getElementById('shift-today-btn')?.addEventListener('click', () => {
         if (shiftDatePicker) {
             shiftDatePicker.setDate(new Date());
             renderShiftStatistics(new Date());
+        }
+    });
+    
+    // === EXPORT AND AUTOMATION HANDLERS ===
+    
+    // Export comprehensive backup
+    document.getElementById('export-comprehensive-backup-btn')?.addEventListener('click', async () => {
+        showNotification('جاري إنشاء النسخة الاحتياطية الشاملة...', 'info');
+        const result = await exportComprehensiveBackup(allSales, allAccounts, allExpenses, allProducts);
+        if (result.success) {
+            showNotification(`تم تصدير النسخة الاحتياطية: ${result.fileName}`, 'success');
+        } else {
+            showNotification(`خطأ في التصدير: ${result.error}`, 'danger');
+        }
+    });
+    
+    // Export daily summary
+    document.getElementById('export-daily-summary-btn')?.addEventListener('click', async () => {
+        const today = new Date();
+        const shiftStats = calculateShiftStats(allSales, today);
+        showNotification('جاري إنشاء التقرير اليومي...', 'info');
+        const result = await exportDailySummaryToExcel(today, shiftStats, allSales, allExpenses);
+        if (result.success) {
+            showNotification(`تم تصدير التقرير: ${result.fileName}`, 'success');
+        } else {
+            showNotification(`خطأ في التصدير: ${result.error}`, 'danger');
+        }
+    });
+    
+    // Export individual shift reports
+    document.querySelectorAll('.shift-export-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const shiftKey = btn.dataset.shift;
+            const selectedDate = shiftDatePicker?.selectedDates[0] || new Date();
+            const shiftStats = calculateShiftStats(allSales, selectedDate);
+            const shiftData = shiftStats[shiftKey];
+            
+            showNotification(`جاري إنشاء تقرير الشيفت...`, 'info');
+            const result = await exportShiftReportToExcel(selectedDate, shiftKey, shiftData, allSales);
+            
+            if (result.success) {
+                showNotification(`تم تصدير التقرير: ${result.fileName}`, 'success');
+                
+                // Also generate text report for messaging
+                const reportText = generateShiftReportText(selectedDate, shiftKey, shiftData);
+                console.log('Shift Report Text:\n', reportText);
+                
+                // Ask if user wants to copy to clipboard
+                if (confirm('هل تريد نسخ ملخص التقرير للمشاركة عبر الرسائل؟')) {
+                    const copyResult = await copyToClipboard(reportText);
+                    if (copyResult.success) {
+                        showNotification('تم نسخ ملخص التقرير!', 'success');
+                    } else {
+                        showNotification('فشل نسخ النص', 'danger');
+                    }
+                }
+            } else {
+                showNotification(`خطأ في التصدير: ${result.error}`, 'danger');
+            }
+        });
+    });
+    
+    // Setup automatic shift report generation
+    scheduleAutomaticShiftReports((shiftKey) => {
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        const shiftStats = calculateShiftStats(allSales, yesterday);
+        const shiftData = shiftStats[shiftKey];
+        
+        // Auto-export shift report
+        exportShiftReportToExcel(yesterday, shiftKey, shiftData, allSales).then(result => {
+            if (result.success) {
+                console.log(`Auto-exported shift report: ${result.fileName}`);
+                showNotification(`تم إنشاء تقرير ${shiftKey} تلقائياً`, 'success');
+            }
+        });
+    });
+    
+    // === ACCOUNTS MANAGEMENT ENHANCEMENTS ===
+    
+    // Export accounts to Excel
+    document.getElementById('export-accounts-btn')?.addEventListener('click', async () => {
+        showNotification('جاري تصدير الأكونتات...', 'info');
+        const productFilter = currentAccountsProductFilter || 'all';
+        const result = await exportAccountsToExcel(allAccounts, productFilter);
+        
+        if (result.success) {
+            showNotification(`تم تصدير ${result.count} أكونت: ${result.fileName}`, 'success');
+        } else {
+            showNotification(`خطأ في التصدير: ${result.error}`, 'danger');
+        }
+    });
+    
+    // Detect account issues (duplicates & inactive)
+    document.getElementById('detect-issues-btn')?.addEventListener('click', () => {
+        const duplicates = detectDuplicateAccounts(allAccounts);
+        const inactive = detectInactiveAccounts(allAccounts, allSales);
+        
+        let message = '=== تقرير المشاكل ===\n\n';
+        
+        if (duplicates.length > 0) {
+            message += `🔴 وُجد ${duplicates.length} أكونت مكرر:\n`;
+            duplicates.slice(0, 5).forEach(dup => {
+                message += `  • ${dup.email}\n`;
+            });
+            if (duplicates.length > 5) {
+                message += `  ... و ${duplicates.length - 5} أخرى\n`;
+            }
+            message += '\n';
+        } else {
+            message += '✅ لا توجد أكونتات مكررة\n\n';
+        }
+        
+        if (inactive.length > 0) {
+            message += `⚠️ وُجد ${inactive.length} أكونت غير نشط (لم يستخدم منذ 30 يوماً):\n`;
+            inactive.slice(0, 5).forEach(acc => {
+                message += `  • ${acc.email} (${acc.productName})\n`;
+            });
+            if (inactive.length > 5) {
+                message += `  ... و ${inactive.length - 5} أخرى\n`;
+            }
+        } else {
+            message += '✅ جميع الأكونتات نشطة';
+        }
+        
+        alert(message);
+        
+        if (duplicates.length > 0 || inactive.length > 0) {
+            showNotification(`تم العثور على ${duplicates.length + inactive.length} مشكلة`, 'danger');
+        } else {
+            showNotification('لا توجد مشاكل في الأكونتات', 'success');
         }
     });
 
