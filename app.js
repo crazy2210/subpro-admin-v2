@@ -1156,13 +1156,21 @@ const setupEventListeners = () => {
     flatpickrInstance = flatpickr("#date-range-filter", {
         mode: "range", dateFormat: "Y-m-d", locale: "ar",
         onChange: function(selectedDates) {
-            if (selectedDates.length === 0) { dateRangeStart = null; dateRangeEnd = null; } 
-            else if (selectedDates.length === 1) {
-                dateRangeStart = new Date(selectedDates[0].setHours(0, 0, 0, 0));
-                dateRangeEnd = new Date(selectedDates[0].setHours(23, 59, 59, 999));
+            if (selectedDates.length === 0) { 
+                dateRangeStart = null; 
+                dateRangeEnd = null; 
+            } else if (selectedDates.length === 1) {
+                // Create copies to avoid mutating the original date objects
+                dateRangeStart = new Date(selectedDates[0]);
+                dateRangeStart.setHours(0, 0, 0, 0);
+                dateRangeEnd = new Date(selectedDates[0]);
+                dateRangeEnd.setHours(23, 59, 59, 999);
             } else {
-                dateRangeStart = new Date(selectedDates[0].setHours(0, 0, 0, 0));
-                dateRangeEnd = new Date(selectedDates[1].setHours(23, 59, 59, 999));
+                // Create copies to avoid mutating the original date objects
+                dateRangeStart = new Date(selectedDates[0]);
+                dateRangeStart.setHours(0, 0, 0, 0);
+                dateRangeEnd = new Date(selectedDates[1]);
+                dateRangeEnd.setHours(23, 59, 59, 999);
             }
             renderData();
         }
@@ -1173,13 +1181,21 @@ const setupEventListeners = () => {
     expenseFlatpickrInstance = flatpickr("#expense-date-range-filter", {
         mode: "range", dateFormat: "Y-m-d", locale: "ar",
         onChange: function(selectedDates) {
-            if (selectedDates.length === 0) { expenseDateRangeStart = null; expenseDateRangeEnd = null; } 
-            else if (selectedDates.length === 1) {
-                expenseDateRangeStart = new Date(selectedDates[0].setHours(0, 0, 0, 0));
-                expenseDateRangeEnd = new Date(selectedDates[0].setHours(23, 59, 59, 999));
+            if (selectedDates.length === 0) { 
+                expenseDateRangeStart = null; 
+                expenseDateRangeEnd = null; 
+            } else if (selectedDates.length === 1) {
+                // Create copies to avoid mutating the original date objects
+                expenseDateRangeStart = new Date(selectedDates[0]);
+                expenseDateRangeStart.setHours(0, 0, 0, 0);
+                expenseDateRangeEnd = new Date(selectedDates[0]);
+                expenseDateRangeEnd.setHours(23, 59, 59, 999);
             } else {
-                expenseDateRangeStart = new Date(selectedDates[0].setHours(0, 0, 0, 0));
-                expenseDateRangeEnd = new Date(selectedDates[1].setHours(23, 59, 59, 999));
+                // Create copies to avoid mutating the original date objects
+                expenseDateRangeStart = new Date(selectedDates[0]);
+                expenseDateRangeStart.setHours(0, 0, 0, 0);
+                expenseDateRangeEnd = new Date(selectedDates[1]);
+                expenseDateRangeEnd.setHours(23, 59, 59, 999);
             }
             renderData();
         }

@@ -103,20 +103,17 @@ let currentUserData = null;
 
 // Initialize authentication
 export async function initAuth(auth, db) {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
         onAuthStateChanged(auth, async (user) => {
             try {
                 if (!user) {
-                    // Public mode: fallback to guest admin
+                    // No user authenticated - redirect to login
                     currentUser = null;
-                    currentUserData = {
-                        uid: 'guest',
-                        name: 'زائر',
-                        email: '',
-                        role: ROLES.ADMIN,
-                        isActive: true
-                    };
-                    resolve(currentUserData);
+                    currentUserData = null;
+                    if (window.location.pathname !== '/login.html') {
+                        window.location.href = 'login.html';
+                    }
+                    reject(new Error('User not authenticated'));
                     return;
                 }
 
@@ -125,43 +122,44 @@ export async function initAuth(auth, db) {
                 const userDoc = await getDoc(userDocRef);
 
                 if (!userDoc.exists()) {
-                    // Fallback to guest admin if user doc missing
-                    currentUserData = {
-                        uid: 'guest',
-                        name: 'زائر',
-                        email: '',
-                        role: ROLES.ADMIN,
-                        isActive: true
-                    };
-                    resolve(currentUserData);
+                    // User document doesn't exist - show error and redirect
+                    showNoRoleMessage();
+                    await signOut(auth);
+                    window.location.href = 'login.html';
+                    reject(new Error('User document not found'));
                     return;
                 }
 
                 currentUserData = userDoc.data();
 
-                // If inactive or no role, fallback to guest admin
-                if (!currentUserData.isActive || !currentUserData.role) {
-                    currentUserData = {
-                        uid: 'guest',
-                        name: 'زائر',
-                        email: '',
-                        role: ROLES.ADMIN,
-                        isActive: true
-                    };
+                // Check if user is inactive
+                if (!currentUserData.isActive) {
+                    showAccountInactiveMessage();
+                    await signOut(auth);
+                    window.location.href = 'login.html';
+                    reject(new Error('Account inactive'));
+                    return;
+                }
+
+                // Check if user has a role assigned
+                if (!currentUserData.role) {
+                    showNoRoleMessage();
+                    await signOut(auth);
+                    window.location.href = 'login.html';
+                    reject(new Error('No role assigned'));
+                    return;
                 }
 
                 resolve(currentUserData);
             } catch (error) {
-                // On any error, fallback to guest admin
+                // On any error, reject and redirect to login
+                console.error('Authentication error:', error);
                 currentUser = null;
-                currentUserData = {
-                    uid: 'guest',
-                    name: 'زائر',
-                    email: '',
-                    role: ROLES.ADMIN,
-                    isActive: true
-                };
-                resolve(currentUserData);
+                currentUserData = null;
+                if (window.location.pathname !== '/login.html') {
+                    window.location.href = 'login.html';
+                }
+                reject(error);
             }
         });
     });
