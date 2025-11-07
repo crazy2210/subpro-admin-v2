@@ -4,40 +4,36 @@ import { getAuth } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth
 import { ROLES, getRoleDisplayName, hasPermission, PERMISSIONS } from './auth.js';
 
 let allUsers = [];
+let isInitialized = false; // Track if event listeners are already attached
+let unsubscribeUsers = null; // Store unsubscribe function for cleanup
 
 export function initUserManagement(db, showNotification) {
     if (!hasPermission(PERMISSIONS.MANAGE_USERS)) {
         return;
     }
 
+    // Prevent multiple initializations
+    if (isInitialized) {
+        return;
+    }
+    isInitialized = true;
+
     // Create user management modal
     createUserManagementModal();
 
-    // Listen for user management button clicks
-    document.body.addEventListener('click', (e) => {
+    // Single delegated event listener for all user management interactions
+    const handleUserManagementClick = (e) => {
+        // Handle modal open/close
         if (e.target.closest('#manage-users-btn')) {
             openUserManagementModal();
+            return;
         }
-        if (e.target.closest('#close-users-modal')) {
+        if (e.target.closest('#close-users-modal') || e.target.closest('#users-modal-backdrop')) {
             closeUserManagementModal();
+            return;
         }
-        if (e.target.closest('#users-modal-backdrop')) {
-            closeUserManagementModal();
-        }
-    });
 
-    // Listen to users collection
-    const usersQuery = query(collection(db, 'users'), orderBy('createdAt', 'desc'));
-    onSnapshot(usersQuery, (snapshot) => {
-        allUsers = snapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-        }));
-        renderUsersTable();
-    });
-
-    // Handle user actions (edit role, activate/deactivate, delete)
-    document.body.addEventListener('click', async (e) => {
+        // Handle user actions
         const target = e.target.closest('[data-user-action]');
         if (!target) return;
 
@@ -47,41 +43,69 @@ export function initUserManagement(db, showNotification) {
 
         if (!user) return;
 
-        try {
-            switch (action) {
-                case 'toggle-active':
-                    await updateDoc(doc(db, 'users', userId), {
-                        isActive: !user.isActive
-                    });
-                    showNotification(
-                        user.isActive ? 'تم إلغاء تفعيل المستخدم' : 'تم تفعيل المستخدم',
-                        'info'
-                    );
-                    break;
+        // Execute the appropriate action
+        handleUserAction(db, showNotification, action, userId, user, target);
+    };
 
-                case 'delete':
-                    if (confirm(`هل أنت متأكد من حذف المستخدم "${user.name}"؟`)) {
-                        await deleteDoc(doc(db, 'users', userId));
-                        showNotification('تم حذف المستخدم', 'danger');
-                    }
-                    break;
+    // Attach single event listener
+    document.body.addEventListener('click', handleUserManagementClick);
 
-                case 'change-role':
-                    const newRole = target.dataset.newRole;
-                    if (newRole && confirm(`هل أنت متأكد من تغيير صلاحية "${user.name}" إلى "${getRoleDisplayName(newRole)}"؟`)) {
-                        await updateDoc(doc(db, 'users', userId), {
-                            role: newRole,
-                            isActive: true // Activate when assigning role
-                        });
-                        showNotification('تم تحديث الصلاحية بنجاح', 'success');
-                    }
-                    break;
-            }
-        } catch (error) {
-            console.error('Error managing user:', error);
-            showNotification('حدث خطأ في العملية', 'danger');
-        }
+    // Listen to users collection
+    const usersQuery = query(collection(db, 'users'), orderBy('createdAt', 'desc'));
+    unsubscribeUsers = onSnapshot(usersQuery, (snapshot) => {
+        allUsers = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+        }));
+        renderUsersTable();
     });
+}
+
+// Separate async handler for user actions to keep event handler clean
+async function handleUserAction(db, showNotification, action, userId, user, target) {
+    try {
+        switch (action) {
+            case 'toggle-active':
+                await updateDoc(doc(db, 'users', userId), {
+                    isActive: !user.isActive
+                });
+                showNotification(
+                    user.isActive ? 'تم إلغاء تفعيل المستخدم' : 'تم تفعيل المستخدم',
+                    'info'
+                );
+                break;
+
+            case 'delete':
+                if (confirm(`هل أنت متأكد من حذف المستخدم "${user.name}"؟`)) {
+                    await deleteDoc(doc(db, 'users', userId));
+                    showNotification('تم حذف المستخدم', 'danger');
+                }
+                break;
+
+            case 'change-role':
+                const newRole = target.dataset.newRole;
+                if (newRole && confirm(`هل أنت متأكد من تغيير صلاحية "${user.name}" إلى "${getRoleDisplayName(newRole)}"؟`)) {
+                    await updateDoc(doc(db, 'users', userId), {
+                        role: newRole,
+                        isActive: true // Activate when assigning role
+                    });
+                    showNotification('تم تحديث الصلاحية بنجاح', 'success');
+                }
+                break;
+        }
+    } catch (error) {
+        console.error('Error managing user:', error);
+        showNotification('حدث خطأ في العملية', 'danger');
+    }
+}
+
+// Cleanup function to remove listeners and unsubscribe from Firestore
+export function cleanupUserManagement() {
+    if (unsubscribeUsers) {
+        unsubscribeUsers();
+        unsubscribeUsers = null;
+    }
+    isInitialized = false;
 }
 
 function createUserManagementModal() {
@@ -233,26 +257,33 @@ function renderUsersTable() {
         </div>
     `;
 
-    // Add change event listeners to role dropdowns
+    // Add change event listeners to role dropdowns using event delegation
+    // Store the old role before change to allow proper reset
     container.querySelectorAll('select[data-user-action="change-role"]').forEach(select => {
+        const originalRole = select.value;
         select.addEventListener('change', (e) => {
             const userId = e.target.dataset.userId;
             const newRole = e.target.value;
             const user = allUsers.find(u => u.id === userId);
             
-            // Create a temporary button to trigger the action
-            const btn = document.createElement('button');
-            btn.dataset.userAction = 'change-role';
-            btn.dataset.userId = userId;
-            btn.dataset.newRole = newRole;
-            btn.click();
+            // Store current role for potential reset
+            const currentRole = user ? user.role : originalRole;
             
-            // Reset select to current role if action is cancelled
+            // Set data attributes on the select element itself to trigger the action
+            e.target.dataset.newRole = newRole;
+            
+            // Trigger a click event that will be caught by the delegated listener
+            const clickEvent = new MouseEvent('click', {
+                bubbles: true,
+                cancelable: true,
+                view: window
+            });
+            e.target.dispatchEvent(clickEvent);
+            
+            // Reset select to current role (will be updated by snapshot if change succeeds)
             setTimeout(() => {
                 const updatedUser = allUsers.find(u => u.id === userId);
-                if (updatedUser) {
-                    e.target.value = updatedUser.role;
-                }
+                e.target.value = updatedUser ? updatedUser.role : currentRole;
             }, 100);
         });
     });
