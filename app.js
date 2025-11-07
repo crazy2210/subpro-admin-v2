@@ -831,11 +831,11 @@ const updateAccountsTable = (accountsData) => {
      const table = document.getElementById('accounts-table');
      table.innerHTML = ''; 
      
-     // Update account status counters
-     const availableCount = allAccounts.filter(a => a.is_active && a.current_uses < a.allowed_uses).length;
-     const inUseCount = allAccounts.filter(a => a.is_active && a.current_uses > 0 && a.current_uses < a.allowed_uses).length;
-     const fullCount = allAccounts.filter(a => a.current_uses >= a.allowed_uses && a.allowed_uses !== Infinity).length;
-     const inactiveCount = allAccounts.filter(a => !a.is_active).length;
+     // Update account status counters - using accountsData instead of allAccounts to respect filters
+     const availableCount = accountsData.filter(a => a.is_active && a.current_uses < a.allowed_uses).length;
+     const inUseCount = accountsData.filter(a => a.is_active && a.current_uses > 0 && a.current_uses < a.allowed_uses).length;
+     const fullCount = accountsData.filter(a => a.current_uses >= a.allowed_uses && a.allowed_uses !== Infinity).length;
+     const inactiveCount = accountsData.filter(a => !a.is_active).length;
      
      document.getElementById('accounts-available-count').textContent = availableCount;
      document.getElementById('accounts-in-use-count').textContent = inUseCount;
