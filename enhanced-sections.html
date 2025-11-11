@@ -1,0 +1,575 @@
+<!-- Enhanced Sections for SubPro Dashboard -->
+<!-- هذا الملف يحتوي على الأقسام المحسنة التي يجب دمجها في index.html -->
+
+<!-- ====================================== -->
+<!-- EXPENSES SECTION - قسم المصروفات المحسن -->
+<!-- ====================================== -->
+<div id="expenses-section-enhanced" class="tab-content hidden">
+    <div class="main-card p-6 mb-6">
+        <!-- Header with Filters -->
+        <div class="flex flex-wrap justify-between items-center mb-6 pb-6 border-b border-gray-200">
+            <div>
+                <h2 class="text-2xl font-bold text-gray-800">
+                    <i class="fas fa-file-invoice-dollar text-purple-600 ml-2"></i>
+                    إدارة المصروفات المتقدمة
+                </h2>
+                <p class="text-sm text-gray-600 mt-1">تتبع وتحليل جميع المصروفات مع فلاتر متقدمة</p>
+            </div>
+            <button class="primary-btn" id="add-expense-enhanced-btn">
+                <i class="fas fa-plus ml-2"></i>
+                إضافة مصروف جديد
+            </button>
+        </div>
+        
+        <!-- Advanced Filters -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6 p-4 bg-gray-50 rounded-lg">
+            <!-- Date Range Filter -->
+            <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-2">
+                    <i class="fas fa-calendar-alt ml-1"></i>
+                    نطاق التاريخ
+                </label>
+                <input type="text" id="expense-date-range-filter" 
+                       class="form-input w-full" 
+                       placeholder="اختر الفترة الزمنية">
+            </div>
+            
+            <!-- Product Filter -->
+            <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-2">
+                    <i class="fas fa-box ml-1"></i>
+                    المنتج
+                </label>
+                <select id="expense-product-filter" class="form-input w-full">
+                    <option value="all">جميع المنتجات</option>
+                    <!-- Products will be populated dynamically -->
+                </select>
+            </div>
+            
+            <!-- Category Filter -->
+            <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-2">
+                    <i class="fas fa-tags ml-1"></i>
+                    نوع المصروف
+                </label>
+                <select id="expense-category-filter" class="form-input w-full">
+                    <option value="all">جميع الأنواع</option>
+                    <option value="ads">إعلانات</option>
+                    <option value="operational">تشغيلي</option>
+                    <option value="renewal">تجديد</option>
+                    <option value="other">أخرى</option>
+                </select>
+            </div>
+            
+            <!-- Sort Order -->
+            <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-2">
+                    <i class="fas fa-sort ml-1"></i>
+                    الترتيب
+                </label>
+                <select id="expense-sort-order" class="form-input w-full">
+                    <option value="desc">الأحدث أولاً</option>
+                    <option value="asc">الأقدم أولاً</option>
+                </select>
+            </div>
+        </div>
+        
+        <!-- Summary Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+            <div class="stat-card bg-gradient-to-br from-red-500 to-pink-600">
+                <div class="flex justify-between items-start mb-2">
+                    <div>
+                        <p class="text-white text-opacity-90 text-sm mb-1">إجمالي اليوم</p>
+                        <p class="text-3xl font-bold" id="expense-total-today">0</p>
+                    </div>
+                    <i class="fas fa-calendar-day text-2xl text-white text-opacity-70"></i>
+                </div>
+                <p class="text-xs text-white text-opacity-80">Today's Expenses</p>
+            </div>
+            
+            <div class="stat-card bg-gradient-to-br from-orange-500 to-amber-600">
+                <div class="flex justify-between items-start mb-2">
+                    <div>
+                        <p class="text-white text-opacity-90 text-sm mb-1">إجمالي الأسبوع</p>
+                        <p class="text-3xl font-bold" id="expense-total-week">0</p>
+                    </div>
+                    <i class="fas fa-calendar-week text-2xl text-white text-opacity-70"></i>
+                </div>
+                <p class="text-xs text-white text-opacity-80">Weekly Expenses</p>
+            </div>
+            
+            <div class="stat-card bg-gradient-to-br from-purple-500 to-indigo-600">
+                <div class="flex justify-between items-start mb-2">
+                    <div>
+                        <p class="text-white text-opacity-90 text-sm mb-1">إجمالي الشهر</p>
+                        <p class="text-3xl font-bold" id="expense-total-month">0</p>
+                    </div>
+                    <i class="fas fa-calendar text-2xl text-white text-opacity-70"></i>
+                </div>
+                <p class="text-xs text-white text-opacity-80">Monthly Expenses</p>
+            </div>
+            
+            <div class="stat-card bg-gradient-to-br from-blue-500 to-cyan-600">
+                <div class="flex justify-between items-start mb-2">
+                    <div>
+                        <p class="text-white text-opacity-90 text-sm mb-1">عدد المصروفات</p>
+                        <p class="text-3xl font-bold" id="expense-count">0</p>
+                    </div>
+                    <i class="fas fa-receipt text-2xl text-white text-opacity-70"></i>
+                </div>
+                <p class="text-xs text-white text-opacity-80">Total Count</p>
+            </div>
+        </div>
+        
+        <!-- Aggregation View -->
+        <div class="mb-6">
+            <div class="flex gap-2 mb-4">
+                <button class="filter-btn active" data-aggregation="daily">يومي</button>
+                <button class="filter-btn" data-aggregation="weekly">أسبوعي</button>
+                <button class="filter-btn" data-aggregation="monthly">شهري</button>
+            </div>
+            <div id="expense-aggregation-chart" style="height: 300px;">
+                <canvas id="expenseAggregationCanvas"></canvas>
+            </div>
+        </div>
+        
+        <!-- Expenses Table -->
+        <div class="table-container">
+            <table class="w-full responsive-table">
+                <thead class="bg-gray-100 border-b-2 border-gray-200">
+                    <tr>
+                        <th class="p-3 text-right font-bold text-gray-700">التاريخ</th>
+                        <th class="p-3 text-right font-bold text-gray-700">المنتج</th>
+                        <th class="p-3 text-right font-bold text-gray-700">النوع</th>
+                        <th class="p-3 text-right font-bold text-gray-700">المبلغ</th>
+                        <th class="p-3 text-right font-bold text-gray-700">ملاحظات</th>
+                        <th class="p-3 text-right font-bold text-gray-700">إجراءات</th>
+                    </tr>
+                </thead>
+                <tbody id="expenses-table-body" class="bg-white">
+                    <!-- Expenses will be populated here -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- ====================================== -->
+<!-- SHIFTS SECTION - قسم الشيفتات المحسن -->
+<!-- ====================================== -->
+<div id="shifts-section-enhanced" class="tab-content hidden">
+    <div class="main-card p-6 mb-6">
+        <!-- Header -->
+        <div class="flex flex-wrap justify-between items-center mb-6 pb-6 border-b border-gray-200">
+            <div>
+                <h2 class="text-2xl font-bold text-gray-800">
+                    <i class="fas fa-clock text-blue-600 ml-2"></i>
+                    إحصائيات الشيفتات
+                </h2>
+                <p class="text-sm text-gray-600 mt-1">تقارير دقيقة لأداء كل شيفت</p>
+            </div>
+            <div class="flex gap-2">
+                <button class="primary-btn bg-green-600 hover:bg-green-700" id="export-shift-csv-btn">
+                    <i class="fas fa-file-csv ml-2"></i>
+                    تصدير CSV
+                </button>
+                <button class="primary-btn" id="export-shift-excel-btn">
+                    <i class="fas fa-file-excel ml-2"></i>
+                    تصدير Excel
+                </button>
+            </div>
+        </div>
+        
+        <!-- Date Picker -->
+        <div class="flex justify-center items-center gap-4 mb-6">
+            <button class="action-btn action-btn-secondary" id="shift-prev-day">
+                <i class="fas fa-chevron-right"></i>
+            </button>
+            <input type="text" id="shift-date-picker" 
+                   class="form-input text-center font-bold text-lg" 
+                   placeholder="اختر التاريخ"
+                   style="max-width: 250px;">
+            <button class="action-btn action-btn-secondary" id="shift-next-day">
+                <i class="fas fa-chevron-left"></i>
+            </button>
+            <button class="action-btn action-btn-primary" id="shift-today-btn">
+                <i class="fas fa-calendar-day ml-2"></i>
+                اليوم
+            </button>
+        </div>
+        
+        <!-- Daily Summary -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+            <div class="stat-card bg-gradient-to-br from-indigo-500 to-purple-600">
+                <div class="flex justify-between items-start mb-2">
+                    <div>
+                        <p class="text-white text-opacity-90 text-sm mb-1">إجمالي الأوردرات</p>
+                        <p class="text-3xl font-bold" id="shift-total-orders">0</p>
+                    </div>
+                    <i class="fas fa-shopping-cart text-2xl text-white text-opacity-70"></i>
+                </div>
+                <p class="text-xs text-white text-opacity-80">Total Orders Today</p>
+            </div>
+            
+            <div class="stat-card bg-gradient-to-br from-green-500 to-emerald-600">
+                <div class="flex justify-between items-start mb-2">
+                    <div>
+                        <p class="text-white text-opacity-90 text-sm mb-1">إجمالي الإيرادات</p>
+                        <p class="text-3xl font-bold" id="shift-total-revenue">0</p>
+                    </div>
+                    <i class="fas fa-dollar-sign text-2xl text-white text-opacity-70"></i>
+                </div>
+                <p class="text-xs text-white text-opacity-80">Total Revenue Today</p>
+            </div>
+            
+            <div class="stat-card bg-gradient-to-br from-amber-500 to-orange-600">
+                <div class="flex justify-between items-start mb-2">
+                    <div>
+                        <p class="text-white text-opacity-90 text-sm mb-1">إجمالي الأرباح</p>
+                        <p class="text-3xl font-bold" id="shift-total-profit">0</p>
+                    </div>
+                    <i class="fas fa-chart-line text-2xl text-white text-opacity-70"></i>
+                </div>
+                <p class="text-xs text-white text-opacity-80">Total Profit Today</p>
+            </div>
+        </div>
+        
+        <!-- Shifts Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6" id="shifts-container">
+            <!-- Shift cards will be rendered here -->
+        </div>
+    </div>
+</div>
+
+<!-- ====================================== -->
+<!-- PRODUCT STATISTICS - إحصائيات المنتجات -->
+<!-- ====================================== -->
+<div id="product-stats-section-enhanced" class="tab-content hidden">
+    <div class="main-card p-6 mb-6">
+        <!-- Header -->
+        <div class="flex flex-wrap justify-between items-center mb-6 pb-6 border-b border-gray-200">
+            <div>
+                <h2 class="text-2xl font-bold text-gray-800">
+                    <i class="fas fa-chart-bar text-green-600 ml-2"></i>
+                    إحصائيات المنتجات التفصيلية
+                </h2>
+                <p class="text-sm text-gray-600 mt-1">تحليل شامل لأداء كل منتج</p>
+            </div>
+            <button class="primary-btn" id="export-products-stats-btn">
+                <i class="fas fa-download ml-2"></i>
+                تصدير التقرير
+            </button>
+        </div>
+        
+        <!-- Date Range Filter -->
+        <div class="flex justify-center items-center gap-4 mb-6">
+            <input type="text" id="product-stats-date-range" 
+                   class="form-input text-center" 
+                   placeholder="اختر الفترة الزمنية"
+                   style="max-width: 300px;">
+            <button class="action-btn action-btn-secondary" id="product-stats-reset-btn">
+                <i class="fas fa-redo ml-2"></i>
+                إعادة تعيين
+            </button>
+        </div>
+        
+        <!-- Products Grid -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" id="products-stats-container">
+            <!-- Product cards will be rendered here -->
+        </div>
+        
+        <!-- Products Chart -->
+        <div class="mt-8">
+            <h3 class="text-xl font-bold text-gray-800 mb-4">
+                <i class="fas fa-chart-pie text-indigo-600 ml-2"></i>
+                مقارنة المنتجات
+            </h3>
+            <div style="height: 400px;">
+                <canvas id="productsComparisonChart"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ====================================== -->
+<!-- ACCOUNTS MANAGEMENT ENHANCED - إدارة الأكونتات المحسنة -->
+<!-- ====================================== -->
+<div id="accounts-section-enhanced" class="tab-content hidden">
+    <div class="main-card p-6 mb-6">
+        <!-- Header -->
+        <div class="flex flex-wrap justify-between items-center mb-6 pb-6 border-b border-gray-200">
+            <div>
+                <h2 class="text-2xl font-bold text-gray-800">
+                    <i class="fas fa-users-cog text-blue-600 ml-2"></i>
+                    إدارة الأكونتات المتقدمة
+                </h2>
+                <p class="text-sm text-gray-600 mt-1">تتبع وإدارة جميع الحسابات بحالاتها المختلفة</p>
+            </div>
+            <button class="primary-btn" id="add-account-enhanced-btn">
+                <i class="fas fa-user-plus ml-2"></i>
+                إضافة حساب جديد
+            </button>
+        </div>
+        
+        <!-- Status Counters -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+            <div class="stat-card bg-gradient-to-br from-gray-600 to-gray-800">
+                <div class="flex justify-between items-start mb-2">
+                    <div>
+                        <p class="text-white text-opacity-90 text-sm mb-1">إجمالي الحسابات</p>
+                        <p class="text-3xl font-bold" id="accounts-total">0</p>
+                    </div>
+                    <i class="fas fa-database text-2xl text-white text-opacity-70"></i>
+                </div>
+                <p class="text-xs text-white text-opacity-80">Total Accounts</p>
+            </div>
+            
+            <div class="stat-card bg-gradient-to-br from-green-500 to-emerald-600 cursor-pointer" data-filter="available">
+                <div class="flex justify-between items-start mb-2">
+                    <div>
+                        <p class="text-white text-opacity-90 text-sm mb-1">متاح</p>
+                        <p class="text-3xl font-bold" id="accounts-available">0</p>
+                    </div>
+                    <i class="fas fa-check-circle text-2xl text-white text-opacity-70"></i>
+                </div>
+                <p class="text-xs text-white text-opacity-80">Available Accounts</p>
+            </div>
+            
+            <div class="stat-card bg-gradient-to-br from-blue-500 to-indigo-600 cursor-pointer" data-filter="used">
+                <div class="flex justify-between items-start mb-2">
+                    <div>
+                        <p class="text-white text-opacity-90 text-sm mb-1">مستخدم</p>
+                        <p class="text-3xl font-bold" id="accounts-used">0</p>
+                    </div>
+                    <i class="fas fa-user-check text-2xl text-white text-opacity-70"></i>
+                </div>
+                <p class="text-xs text-white text-opacity-80">Used Accounts</p>
+            </div>
+            
+            <div class="stat-card bg-gradient-to-br from-red-500 to-pink-600 cursor-pointer" data-filter="damaged">
+                <div class="flex justify-between items-start mb-2">
+                    <div>
+                        <p class="text-white text-opacity-90 text-sm mb-1">تالف</p>
+                        <p class="text-3xl font-bold" id="accounts-damaged">0</p>
+                    </div>
+                    <i class="fas fa-exclamation-triangle text-2xl text-white text-opacity-70"></i>
+                </div>
+                <p class="text-xs text-white text-opacity-80">Damaged Accounts</p>
+            </div>
+        </div>
+        
+        <!-- Filters -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 p-4 bg-gray-50 rounded-lg">
+            <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-2">
+                    <i class="fas fa-filter ml-1"></i>
+                    حالة الحساب
+                </label>
+                <select id="account-status-filter" class="form-input w-full">
+                    <option value="all">جميع الحالات</option>
+                    <option value="available">متاح</option>
+                    <option value="used">مستخدم</option>
+                    <option value="damaged">تالف</option>
+                </select>
+            </div>
+            
+            <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-2">
+                    <i class="fas fa-box ml-1"></i>
+                    المنتج
+                </label>
+                <select id="account-product-filter" class="form-input w-full">
+                    <option value="all">جميع المنتجات</option>
+                    <!-- Products will be populated dynamically -->
+                </select>
+            </div>
+            
+            <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-2">
+                    <i class="fas fa-search ml-1"></i>
+                    بحث
+                </label>
+                <input type="text" id="account-search-input" 
+                       class="form-input w-full" 
+                       placeholder="ابحث بالبريد أو المعرف...">
+            </div>
+        </div>
+        
+        <!-- Low Stock Alerts -->
+        <div id="low-stock-alerts" class="hidden mb-6">
+            <!-- Alerts will be rendered here -->
+        </div>
+        
+        <!-- Accounts Table -->
+        <div class="table-container">
+            <table class="w-full responsive-table">
+                <thead class="bg-gray-100 border-b-2 border-gray-200">
+                    <tr>
+                        <th class="p-3 text-right font-bold text-gray-700">المنتج</th>
+                        <th class="p-3 text-right font-bold text-gray-700">البريد الإلكتروني</th>
+                        <th class="p-3 text-right font-bold text-gray-700">الحالة</th>
+                        <th class="p-3 text-right font-bold text-gray-700">تاريخ الإنشاء</th>
+                        <th class="p-3 text-right font-bold text-gray-700">تاريخ الاستخدام</th>
+                        <th class="p-3 text-right font-bold text-gray-700">إجراءات</th>
+                    </tr>
+                </thead>
+                <tbody id="accounts-enhanced-table-body" class="bg-white">
+                    <!-- Accounts will be populated here -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- ====================================== -->
+<!-- ENHANCED DASHBOARD HOME - الصفحة الرئيسية المحسنة -->
+<!-- ====================================== -->
+<div id="dashboard-enhanced-home" class="hidden">
+    <!-- This will replace the existing dashboard section -->
+    
+    <!-- Quick Stats Grid -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <div class="stat-card bg-gradient-to-br from-indigo-500 to-purple-600">
+            <div class="flex justify-between items-start mb-2">
+                <div>
+                    <p class="text-white text-opacity-90 text-sm mb-1">الاشتراكات النشطة</p>
+                    <p class="text-3xl font-bold" id="dash-active-subs">0</p>
+                </div>
+                <i class="fas fa-users text-2xl text-white text-opacity-70"></i>
+            </div>
+            <p class="text-xs text-white text-opacity-80">Active Subscriptions</p>
+        </div>
+        
+        <div class="stat-card bg-gradient-to-br from-green-500 to-emerald-600">
+            <div class="flex justify-between items-start mb-2">
+                <div>
+                    <p class="text-white text-opacity-90 text-sm mb-1">مبيعات اليوم</p>
+                    <p class="text-3xl font-bold" id="dash-today-sales">0</p>
+                </div>
+                <i class="fas fa-chart-line text-2xl text-white text-opacity-70"></i>
+            </div>
+            <div class="flex items-center gap-2 mt-1">
+                <span class="text-xs text-white text-opacity-80" id="dash-week-sales">هذا الأسبوع: 0</span>
+            </div>
+        </div>
+        
+        <div class="stat-card bg-gradient-to-br from-amber-500 to-orange-600">
+            <div class="flex justify-between items-start mb-2">
+                <div>
+                    <p class="text-white text-opacity-90 text-sm mb-1">تجديدات معلقة</p>
+                    <p class="text-3xl font-bold" id="dash-pending-renewals">0</p>
+                </div>
+                <i class="fas fa-bell text-2xl text-white text-opacity-70"></i>
+            </div>
+            <p class="text-xs text-white text-opacity-80">خلال 48 ساعة</p>
+        </div>
+        
+        <div class="stat-card bg-gradient-to-br from-blue-500 to-cyan-600">
+            <div class="flex justify-between items-start mb-2">
+                <div>
+                    <p class="text-white text-opacity-90 text-sm mb-1">حسابات متاحة</p>
+                    <p class="text-3xl font-bold" id="dash-available-accounts">0</p>
+                </div>
+                <i class="fas fa-check-circle text-2xl text-white text-opacity-70"></i>
+            </div>
+            <div class="flex gap-2 text-xs text-white text-opacity-80">
+                <span>مستخدم: <span id="dash-used-accounts">0</span></span>
+                <span>تالف: <span id="dash-damaged-accounts">0</span></span>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Expense Stats -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+        <div class="stat-card bg-gradient-to-br from-red-500 to-pink-600">
+            <div class="flex justify-between items-start mb-2">
+                <div>
+                    <p class="text-white text-opacity-90 text-sm mb-1">مصروفات اليوم</p>
+                    <p class="text-3xl font-bold" id="dash-today-expenses">0</p>
+                </div>
+                <i class="fas fa-receipt text-2xl text-white text-opacity-70"></i>
+            </div>
+            <p class="text-xs text-white text-opacity-80">Today's Expenses</p>
+        </div>
+        
+        <div class="stat-card bg-gradient-to-br from-purple-500 to-indigo-600">
+            <div class="flex justify-between items-start mb-2">
+                <div>
+                    <p class="text-white text-opacity-90 text-sm mb-1">مصروفات الشهر</p>
+                    <p class="text-3xl font-bold" id="dash-month-expenses">0</p>
+                </div>
+                <i class="fas fa-calendar text-2xl text-white text-opacity-70"></i>
+            </div>
+            <p class="text-xs text-white text-opacity-80">Monthly Expenses</p>
+        </div>
+    </div>
+    
+    <!-- Charts Row -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        <!-- Sales Chart -->
+        <div class="main-card p-6">
+            <h3 class="text-lg font-bold text-gray-800 mb-4">
+                <i class="fas fa-chart-line text-green-600 ml-2"></i>
+                المبيعات - آخر 7 أيام
+            </h3>
+            <div style="height: 250px;">
+                <canvas id="dashSalesLineChart"></canvas>
+            </div>
+        </div>
+        
+        <!-- Top Products Chart -->
+        <div class="main-card p-6">
+            <h3 class="text-lg font-bold text-gray-800 mb-4">
+                <i class="fas fa-trophy text-amber-600 ml-2"></i>
+                أفضل 5 منتجات
+            </h3>
+            <div style="height: 250px;">
+                <canvas id="dashTopProductsChart"></canvas>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Alerts Panel -->
+    <div class="main-card p-6 mb-6">
+        <h3 class="text-xl font-bold text-gray-800 mb-4">
+            <i class="fas fa-exclamation-triangle text-red-600 ml-2"></i>
+            التنبيهات والإشعارات
+        </h3>
+        
+        <div id="dashboard-alerts-container" class="space-y-3">
+            <!-- Alerts will be rendered here -->
+        </div>
+    </div>
+    
+    <!-- Quick Links -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <a href="#" class="main-card p-4 text-center hover:shadow-lg transition-all" data-goto="sales">
+            <i class="fas fa-shopping-cart text-3xl text-indigo-600 mb-2"></i>
+            <p class="font-semibold text-gray-800">سجل المبيعات</p>
+        </a>
+        <a href="#" class="main-card p-4 text-center hover:shadow-lg transition-all" data-goto="accounts">
+            <i class="fas fa-users text-3xl text-green-600 mb-2"></i>
+            <p class="font-semibold text-gray-800">الأكونتات</p>
+        </a>
+        <a href="#" class="main-card p-4 text-center hover:shadow-lg transition-all" data-goto="expenses">
+            <i class="fas fa-receipt text-3xl text-red-600 mb-2"></i>
+            <p class="font-semibold text-gray-800">المصروفات</p>
+        </a>
+        <a href="#" class="main-card p-4 text-center hover:shadow-lg transition-all" data-goto="shifts">
+            <i class="fas fa-clock text-3xl text-blue-600 mb-2"></i>
+            <p class="font-semibold text-gray-800">الشيفتات</p>
+        </a>
+    </div>
+    
+    <!-- Last Update -->
+    <div class="text-center mt-6">
+        <p class="text-sm text-gray-500">
+            <i class="fas fa-sync-alt ml-1"></i>
+            آخر تحديث: <span id="dash-last-update">الآن</span>
+        </p>
+        <button class="text-indigo-600 hover:text-indigo-800 text-sm font-semibold mt-2" id="dash-refresh-btn">
+            <i class="fas fa-redo ml-1"></i>
+            تحديث البيانات
+        </button>
+    </div>
+</div>

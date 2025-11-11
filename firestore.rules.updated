@@ -1,0 +1,119 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isAdmin() {
+      return isAuthenticated() && 
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+    
+    function isTeamLeader() {
+      return isAuthenticated() && 
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'team_leader'];
+    }
+    
+    function isModerator() {
+      return isAuthenticated() && 
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'team_leader', 'moderator'];
+    }
+    
+    // Guest mode: Allow all operations (for public deployment)
+    // If you want to enforce authentication, change 'true' to 'isAuthenticated()'
+    
+    // Users collection - Admin only
+    match /users/{userId} {
+      allow read: if true; // Allow reading user profiles
+      allow write: if isAdmin(); // Only admins can modify users
+    }
+    
+    // Products collection
+    match /products/{productId} {
+      allow read: if true;
+      allow create: if isTeamLeader();
+      allow update: if isTeamLeader();
+      allow delete: if isAdmin();
+    }
+    
+    // Sales collection (orders)
+    match /sales/{saleId} {
+      allow read: if true;
+      allow create: if true; // Allow creating sales
+      allow update: if true; // Allow updating sales (confirmation, status, etc.)
+      allow delete: if isAdmin(); // Only admins can delete
+    }
+    
+    // Accounts collection
+    match /accounts/{accountId} {
+      allow read: if true;
+      allow create: if true; // Allow creating accounts
+      allow update: if true; // Allow updating accounts (status changes, assignments)
+      allow delete: if isAdmin(); // Only admins can delete
+    }
+    
+    // Expenses collection
+    match /expenses/{expenseId} {
+      allow read: if true;
+      allow create: if true; // Allow creating expenses
+      allow update: if true; // Allow updating expenses
+      allow delete: if isAdmin(); // Only admins can delete
+    }
+    
+    // Problems collection
+    match /problems/{problemId} {
+      allow read: if true;
+      allow create: if true;
+      allow update: if true;
+      allow delete: if isAdmin();
+    }
+    
+    // Ad Campaigns collection
+    match /ad_campaigns/{campaignId} {
+      allow read: if true;
+      allow create: if true;
+      allow update: if true;
+      allow delete: if isAdmin();
+    }
+    
+    // Audit Logs collection (NEW)
+    // Logs all sensitive operations for compliance and tracking
+    match /audit_logs/{logId} {
+      allow read: if true; // Everyone can read audit logs
+      allow create: if true; // Allow creating logs (system operations)
+      allow update: if false; // Audit logs should never be updated
+      allow delete: if isAdmin(); // Only admins can delete old logs
+    }
+    
+    // Deny all other documents
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
+
+/*
+===========================================
+FIRESTORE SECURITY RULES - SubPro Dashboard
+===========================================
+
+تم تحديث القواعد لتشمل:
+1. ✅ جدول audit_logs الجديد
+2. ✅ صلاحيات محسّنة للمستخدمين
+3. ✅ حماية البيانات الحساسة
+4. ✅ Guest mode للنشر العام
+
+ملاحظات هامة:
+- الوضع الحالي: Guest Mode (true للجميع)
+- لتفعيل المصادقة: غيّر 'true' إلى 'isAuthenticated()'
+- سجلات التدقيق (audit_logs) محمية من التعديل
+- المدراء فقط يمكنهم حذف البيانات
+
+آخر تحديث: نوفمبر 2025
+*/

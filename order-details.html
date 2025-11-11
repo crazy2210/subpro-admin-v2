@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>تفاصيل الأوردر | SubPro Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        .timeline-item {
+            position: relative;
+            padding-right: 2rem;
+            padding-bottom: 2rem;
+        }
+        .timeline-item:not(:last-child)::before {
+            content: '';
+            position: absolute;
+            right: 0.375rem;
+            top: 2rem;
+            width: 2px;
+            height: calc(100% - 2rem);
+            background: linear-gradient(to bottom, #e5e7eb, transparent);
+        }
+        .timeline-dot {
+            position: absolute;
+            right: 0;
+            top: 0.25rem;
+            width: 0.875rem;
+            height: 0.875rem;
+            border-radius: 50%;
+            background: white;
+            border: 2px solid;
+            z-index: 1;
+        }
+        .card-detail {
+            background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+            border: 1px solid #e2e8f0;
+            border-radius: 1rem;
+            padding: 1.5rem;
+            transition: all 0.3s ease;
+        }
+        .card-detail:hover {
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            transform: translateY(-2px);
+        }
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.375rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        .badge-green {
+            background-color: #d1fae5;
+            color: #065f46;
+        }
+        .badge-red {
+            background-color: #fee2e2;
+            color: #991b1b;
+        }
+        .badge-yellow {
+            background-color: #fef3c7;
+            color: #92400e;
+        }
+        .badge-blue {
+            background-color: #dbeafe;
+            color: #1e3a8a;
+        }
+        .action-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.625rem 1.25rem;
+            border-radius: 0.5rem;
+            font-weight: 600;
+            transition: all 0.2s ease;
+            border: none;
+            cursor: pointer;
+        }
+        .action-btn-primary {
+            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+            color: white;
+        }
+        .action-btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4);
+        }
+        .action-btn-danger {
+            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+            color: white;
+        }
+        .action-btn-danger:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(239, 68, 68, 0.4);
+        }
+        .action-btn-secondary {
+            background-color: #f1f5f9;
+            color: #475569;
+        }
+        .action-btn-secondary:hover {
+            background-color: #e2e8f0;
+        }
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.75rem 0;
+            border-bottom: 1px solid #f1f5f9;
+        }
+        .info-row:last-child {
+            border-bottom: none;
+        }
+        .copy-btn {
+            cursor: pointer;
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.375rem;
+            background-color: #f1f5f9;
+            transition: all 0.2s ease;
+        }
+        .copy-btn:hover {
+            background-color: #e2e8f0;
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-slate-50 to-indigo-50 min-h-screen p-4 md:p-8">
+    
+    <!-- Toast Notification -->
+    <div id="toast" class="hidden"></div>
+    
+    <!-- Main Container -->
+    <div class="max-w-7xl mx-auto">
+        
+        <!-- Header -->
+        <div class="flex items-center justify-between mb-6">
+            <div class="flex items-center gap-3">
+                <a href="index.html" class="w-10 h-10 rounded-lg bg-white shadow-sm flex items-center justify-center hover:bg-gray-50 transition-colors">
+                    <i class="fas fa-arrow-right text-gray-600"></i>
+                </a>
+                <div>
+                    <h1 class="text-2xl md:text-3xl font-bold text-gray-800">
+                        <i class="fas fa-file-invoice text-indigo-600 ml-2"></i>
+                        تفاصيل الأوردر
+                    </h1>
+                    <p class="text-sm text-gray-500 mt-1" id="order-subtitle">جاري التحميل...</p>
+                </div>
+            </div>
+            
+            <!-- Action Bar -->
+            <div class="flex gap-2 flex-wrap">
+                <button class="action-btn action-btn-secondary" id="print-btn" title="طباعة">
+                    <i class="fas fa-print"></i>
+                    <span class="hidden md:inline">طباعة</span>
+                </button>
+                <button class="action-btn action-btn-secondary" id="export-pdf-btn" title="تصدير PDF">
+                    <i class="fas fa-file-pdf"></i>
+                    <span class="hidden md:inline">تصدير PDF</span>
+                </button>
+                <button class="action-btn action-btn-primary" id="edit-quick-btn" title="تعديل سريع">
+                    <i class="fas fa-edit"></i>
+                    <span class="hidden md:inline">تعديل</span>
+                </button>
+            </div>
+        </div>
+        
+        <!-- Loading State -->
+        <div id="loading-state" class="text-center py-20">
+            <div class="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+            <p class="text-gray-600 mt-4">جاري تحميل التفاصيل...</p>
+        </div>
+        
+        <!-- Main Content -->
+        <div id="order-content" class="hidden">
+            
+            <!-- Row 1: Order Summary & Account Info -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                
+                <!-- Order Summary Card -->
+                <div class="card-detail">
+                    <div class="flex items-center justify-between mb-4 pb-4 border-b border-gray-200">
+                        <h2 class="text-xl font-bold text-gray-800">
+                            <i class="fas fa-clipboard-list text-indigo-600 ml-2"></i>
+                            ملخص الأوردر
+                        </h2>
+                        <span id="order-status-badge" class="badge badge-blue">قيد المعالجة</span>
+                    </div>
+                    
+                    <div>
+                        <div class="info-row">
+                            <span class="text-gray-600 font-medium">رقم الأوردر</span>
+                            <span class="text-gray-800 font-semibold" id="order-id">-</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="text-gray-600 font-medium">العميل</span>
+                            <span class="text-gray-800 font-semibold" id="order-customer">-</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="text-gray-600 font-medium">المنتج</span>
+                            <span class="text-gray-800 font-semibold" id="order-product">-</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="text-gray-600 font-medium">السعر</span>
+                            <span class="text-green-600 font-bold text-lg" id="order-price">-</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="text-gray-600 font-medium">تاريخ الإنشاء</span>
+                            <span class="text-gray-800" id="order-date">-</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="text-gray-600 font-medium">طريقة الدفع</span>
+                            <span class="text-gray-800" id="order-payment">-</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="text-gray-600 font-medium">الحالة</span>
+                            <span class="text-gray-800" id="order-confirmed">-</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Account Info Card -->
+                <div class="card-detail" id="account-card">
+                    <div class="flex items-center justify-between mb-4 pb-4 border-b border-gray-200">
+                        <h2 class="text-xl font-bold text-gray-800">
+                            <i class="fas fa-user-circle text-green-600 ml-2"></i>
+                            الحساب المرتبط
+                        </h2>
+                        <span id="account-status-badge" class="badge badge-green">متاح</span>
+                    </div>
+                    
+                    <div id="account-info">
+                        <div class="info-row">
+                            <span class="text-gray-600 font-medium">البريد الإلكتروني</span>
+                            <div class="flex items-center gap-2">
+                                <span class="text-gray-800 font-mono" id="account-email">-</span>
+                                <button class="copy-btn" data-copy="email" title="نسخ">
+                                    <i class="fas fa-copy text-gray-600 text-sm"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="info-row">
+                            <span class="text-gray-600 font-medium">كلمة المرور</span>
+                            <div class="flex items-center gap-2">
+                                <span class="text-gray-800 font-mono" id="account-password">********</span>
+                                <button class="copy-btn" id="toggle-password" title="إظهار/إخفاء">
+                                    <i class="fas fa-eye text-gray-600 text-sm"></i>
+                                </button>
+                                <button class="copy-btn" data-copy="password" title="نسخ">
+                                    <i class="fas fa-copy text-gray-600 text-sm"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="info-row">
+                            <span class="text-gray-600 font-medium">حالة الحساب</span>
+                            <span class="text-gray-800" id="account-status-text">-</span>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-6 pt-4 border-t border-gray-200">
+                        <button class="action-btn action-btn-danger w-full" id="mark-damaged-btn">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            تعيين كـ تالف واستبدال
+                        </button>
+                    </div>
+                    
+                    <!-- Damaged Account Info (if exists) -->
+                    <div id="damaged-account-info" class="hidden mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+                        <div class="flex items-start gap-3 mb-3">
+                            <i class="fas fa-times-circle text-red-600 text-xl mt-1"></i>
+                            <div>
+                                <h3 class="font-bold text-red-900 mb-1">الحساب التالف (قديم)</h3>
+                                <p class="text-sm text-red-700" id="damaged-account-email">-</p>
+                                <p class="text-xs text-red-600 mt-1" id="damaged-reason">-</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Row 2: Subscription Info & Timeline -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                
+                <!-- Subscription Info Card -->
+                <div class="card-detail">
+                    <div class="flex items-center mb-4 pb-4 border-b border-gray-200">
+                        <h2 class="text-xl font-bold text-gray-800">
+                            <i class="fas fa-calendar-check text-purple-600 ml-2"></i>
+                            معلومات الاشتراك
+                        </h2>
+                    </div>
+                    
+                    <div>
+                        <div class="info-row">
+                            <span class="text-gray-600 font-medium">تاريخ البداية</span>
+                            <span class="text-gray-800" id="sub-start-date">-</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="text-gray-600 font-medium">تاريخ الانتهاء</span>
+                            <span class="text-gray-800" id="sub-end-date">-</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="text-gray-600 font-medium">حالة التجديد</span>
+                            <span class="text-gray-800" id="renewal-status">-</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="text-gray-600 font-medium">أيام متبقية</span>
+                            <span class="text-gray-800 font-bold" id="days-remaining">-</span>
+                        </div>
+                    </div>
+                    
+                    <div id="renewal-alert" class="hidden mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                        <div class="flex items-center gap-2">
+                            <i class="fas fa-exclamation-circle text-yellow-600"></i>
+                            <span class="text-yellow-900 text-sm font-semibold">التجديد قريب!</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Timeline Card -->
+                <div class="card-detail">
+                    <div class="flex items-center mb-4 pb-4 border-b border-gray-200">
+                        <h2 class="text-xl font-bold text-gray-800">
+                            <i class="fas fa-history text-blue-600 ml-2"></i>
+                            السجل الزمني
+                        </h2>
+                    </div>
+                    
+                    <div id="timeline-container" class="max-h-96 overflow-y-auto">
+                        <!-- Timeline items will be injected here -->
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Notes Section -->
+            <div class="card-detail mt-6">
+                <div class="flex items-center mb-4 pb-4 border-b border-gray-200">
+                    <h2 class="text-xl font-bold text-gray-800">
+                        <i class="fas fa-sticky-note text-amber-600 ml-2"></i>
+                        ملاحظات
+                    </h2>
+                </div>
+                <p class="text-gray-700" id="order-notes">لا توجد ملاحظات</p>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Damage Confirmation Modal -->
+    <div id="damage-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-xl p-6 max-w-md w-full shadow-2xl">
+            <div class="flex items-center gap-3 mb-4">
+                <div class="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center">
+                    <i class="fas fa-exclamation-triangle text-red-600 text-xl"></i>
+                </div>
+                <h3 class="text-xl font-bold text-gray-800">تأكيد تلف الحساب</h3>
+            </div>
+            
+            <p class="text-gray-600 mb-4">
+                سيتم وسم الحساب الحالي كـ تالف والبحث عن حساب بديل متاح تلقائياً.
+            </p>
+            
+            <div class="mb-4">
+                <label class="block text-sm font-semibold text-gray-700 mb-2">سبب التلف (اختياري)</label>
+                <textarea 
+                    id="damage-reason-input" 
+                    class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                    rows="3"
+                    placeholder="اكتب السبب هنا..."></textarea>
+            </div>
+            
+            <div class="flex gap-3">
+                <button class="action-btn action-btn-secondary flex-1" id="cancel-damage-btn">
+                    إلغاء
+                </button>
+                <button class="action-btn action-btn-danger flex-1" id="confirm-damage-btn">
+                    <i class="fas fa-check ml-2"></i>
+                    تأكيد الاستبدال
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getFirestore } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+        import { 
+            getOrderDetails, 
+            replaceDeamagedAccount, 
+            showToast, 
+            showConfirmDialog,
+            copyToClipboard 
+        } from './enhanced-features.js';
+        
+        // Firebase Configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyAmO9EZt_56rqEdBqxkyJW8ROZDWQ-LDAU",
+            authDomain: "subpro-v2.firebaseapp.com",
+            projectId: "subpro-v2",
+            storageBucket: "subpro-v2.appspot.com",
+            messagingSenderId: "314294327179",
+            appId: "1:314294327179:web:96e01a22aab05e500bc18e"
+        };
+        
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        
+        // Get order ID from URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const orderId = urlParams.get('id');
+        
+        let orderData = null;
+        let accountData = null;
+        let passwordVisible = false;
+        
+        // Initialize page
+        async function init() {
+            if (!orderId) {
+                showToast('معرف الأوردر غير موجود', 'error');
+                setTimeout(() => window.location.href = 'index.html', 2000);
+                return;
+            }
+            
+            try {
+                const details = await getOrderDetails(db, orderId);
+                orderData = details.order;
+                accountData = details.account;
+                
+                renderOrderDetails(details);
+                
+                document.getElementById('loading-state').classList.add('hidden');
+                document.getElementById('order-content').classList.remove('hidden');
+                
+            } catch (error) {
+                console.error('Error loading order:', error);
+                showToast('فشل تحميل تفاصيل الأوردر', 'error');
+            }
+        }
+        
+        // Render order details
+        function renderOrderDetails(details) {
+            const { order, account, damagedAccount, timeline } = details;
+            
+            // Order summary
+            document.getElementById('order-subtitle').textContent = `أوردر #${order.id.substring(0, 8)}`;
+            document.getElementById('order-id').textContent = order.id;
+            document.getElementById('order-customer').textContent = order.customer || '-';
+            document.getElementById('order-product').textContent = order.product || '-';
+            document.getElementById('order-price').textContent = `${order.price || 0} ريال`;
+            document.getElementById('order-date').textContent = new Date(order.date).toLocaleString('ar-EG');
+            document.getElementById('order-payment').textContent = order.payment_method || '-';
+            document.getElementById('order-confirmed').textContent = order.isConfirmed ? 'مؤكد' : 'قيد المراجعة';
+            
+            // Status badge
+            const statusBadge = document.getElementById('order-status-badge');
+            if (order.isConfirmed) {
+                statusBadge.textContent = 'مؤكد';
+                statusBadge.className = 'badge badge-green';
+            } else {
+                statusBadge.textContent = 'قيد المراجعة';
+                statusBadge.className = 'badge badge-yellow';
+            }
+            
+            // Account info
+            if (account) {
+                document.getElementById('account-email').textContent = account.email || '-';
+                document.getElementById('account-email').setAttribute('data-value', account.email || '');
+                document.getElementById('account-password').setAttribute('data-value', account.password || '');
+                document.getElementById('account-status-text').textContent = getAccountStatusText(account.status);
+                
+                const accountBadge = document.getElementById('account-status-badge');
+                accountBadge.textContent = getAccountStatusText(account.status);
+                accountBadge.className = `badge ${getAccountBadgeClass(account.status)}`;
+            } else {
+                document.getElementById('account-info').innerHTML = '<p class="text-gray-500 text-center py-4">لا يوجد حساب مرتبط</p>';
+                document.getElementById('mark-damaged-btn').disabled = true;
+                document.getElementById('mark-damaged-btn').classList.add('opacity-50', 'cursor-not-allowed');
+            }
+            
+            // Damaged account info
+            if (damagedAccount) {
+                const damagedInfo = document.getElementById('damaged-account-info');
+                damagedInfo.classList.remove('hidden');
+                document.getElementById('damaged-account-email').textContent = damagedAccount.email || '-';
+                document.getElementById('damaged-reason').textContent = `السبب: ${order.replacement_reason || 'غير محدد'}`;
+            }
+            
+            // Subscription info
+            if (order.subscription_start) {
+                document.getElementById('sub-start-date').textContent = new Date(order.subscription_start).toLocaleDateString('ar-EG');
+            }
+            if (order.subscription_end) {
+                const endDate = new Date(order.subscription_end);
+                document.getElementById('sub-end-date').textContent = endDate.toLocaleDateString('ar-EG');
+                
+                const daysLeft = Math.ceil((endDate - new Date()) / (1000 * 60 * 60 * 24));
+                document.getElementById('days-remaining').textContent = `${daysLeft} يوم`;
+                
+                if (daysLeft <= 2 && daysLeft >= 0) {
+                    document.getElementById('renewal-alert').classList.remove('hidden');
+                }
+            }
+            
+            document.getElementById('renewal-status').textContent = order.renewalStatus || 'جديد';
+            
+            // Timeline
+            renderTimeline(timeline);
+            
+            // Notes
+            document.getElementById('order-notes').textContent = order.notes || 'لا توجد ملاحظات';
+        }
+        
+        // Render timeline
+        function renderTimeline(timeline) {
+            const container = document.getElementById('timeline-container');
+            container.innerHTML = '';
+            
+            if (!timeline || timeline.length === 0) {
+                container.innerHTML = '<p class="text-gray-500 text-center py-4">لا توجد أحداث</p>';
+                return;
+            }
+            
+            timeline.forEach((item, index) => {
+                const timelineItem = document.createElement('div');
+                timelineItem.className = 'timeline-item';
+                
+                const date = new Date(item.timestamp);
+                const timeStr = date.toLocaleString('ar-EG', { 
+                    month: 'short', 
+                    day: 'numeric', 
+                    hour: '2-digit', 
+                    minute: '2-digit' 
+                });
+                
+                timelineItem.innerHTML = `
+                    <div class="timeline-dot ${item.color.replace('text-', 'border-')}"></div>
+                    <div class="pr-6">
+                        <div class="flex items-center gap-2 mb-1">
+                            <i class="fas ${item.icon} ${item.color}"></i>
+                            <span class="font-semibold text-gray-800">${item.title}</span>
+                        </div>
+                        <p class="text-sm text-gray-600 mb-1">${item.description}</p>
+                        <span class="text-xs text-gray-400">${timeStr}</span>
+                    </div>
+                `;
+                
+                container.appendChild(timelineItem);
+            });
+        }
+        
+        // Helper functions
+        function getAccountStatusText(status) {
+            const statusMap = {
+                'available': 'متاح',
+                'used': 'مستخدم',
+                'damaged': 'تالف'
+            };
+            return statusMap[status] || status;
+        }
+        
+        function getAccountBadgeClass(status) {
+            const classMap = {
+                'available': 'badge-green',
+                'used': 'badge-blue',
+                'damaged': 'badge-red'
+            };
+            return classMap[status] || 'badge-blue';
+        }
+        
+        // Event listeners
+        document.getElementById('toggle-password').addEventListener('click', () => {
+            passwordVisible = !passwordVisible;
+            const passwordEl = document.getElementById('account-password');
+            const icon = document.querySelector('#toggle-password i');
+            
+            if (passwordVisible) {
+                passwordEl.textContent = passwordEl.getAttribute('data-value');
+                icon.className = 'fas fa-eye-slash text-gray-600 text-sm';
+            } else {
+                passwordEl.textContent = '********';
+                icon.className = 'fas fa-eye text-gray-600 text-sm';
+            }
+        });
+        
+        // Copy buttons
+        document.querySelectorAll('.copy-btn[data-copy]').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const type = btn.getAttribute('data-copy');
+                let text = '';
+                
+                if (type === 'email') {
+                    text = document.getElementById('account-email').getAttribute('data-value');
+                } else if (type === 'password') {
+                    text = document.getElementById('account-password').getAttribute('data-value');
+                }
+                
+                if (text) {
+                    const success = await copyToClipboard(text);
+                    if (success) {
+                        showToast('تم النسخ بنجاح', 'success');
+                    } else {
+                        showToast('فشل النسخ', 'error');
+                    }
+                }
+            });
+        });
+        
+        // Mark as damaged
+        document.getElementById('mark-damaged-btn').addEventListener('click', () => {
+            document.getElementById('damage-modal').classList.remove('hidden');
+        });
+        
+        document.getElementById('cancel-damage-btn').addEventListener('click', () => {
+            document.getElementById('damage-modal').classList.add('hidden');
+        });
+        
+        document.getElementById('confirm-damage-btn').addEventListener('click', async () => {
+            const reason = document.getElementById('damage-reason-input').value.trim();
+            
+            try {
+                document.getElementById('confirm-damage-btn').disabled = true;
+                document.getElementById('confirm-damage-btn').innerHTML = '<i class="fas fa-spinner fa-spin ml-2"></i> جاري الاستبدال...';
+                
+                const result = await replaceDeamagedAccount(db, orderId, reason);
+                
+                if (result.success) {
+                    showToast('تم استبدال الحساب بنجاح', 'success');
+                    document.getElementById('damage-modal').classList.add('hidden');
+                    
+                    // Reload page after 1 second
+                    setTimeout(() => window.location.reload(), 1000);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                showToast(error.message || 'فشل الاستبدال', 'error');
+                document.getElementById('confirm-damage-btn').disabled = false;
+                document.getElementById('confirm-damage-btn').innerHTML = '<i class="fas fa-check ml-2"></i> تأكيد الاستبدال';
+            }
+        });
+        
+        // Print
+        document.getElementById('print-btn').addEventListener('click', () => {
+            window.print();
+        });
+        
+        // Initialize
+        init();
+    </script>
+</body>
+</html>
