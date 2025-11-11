@@ -249,9 +249,15 @@
                 <button class="nav-tab" data-tab="sales">
                     <i class="fa-solid fa-receipt ml-2"></i>سجل المبيعات
                 </button>
+                <button class="nav-tab" data-tab="product-stats">
+                    <i class="fa-solid fa-chart-bar ml-2"></i>إحصائيات المنتجات
+                </button>
                 <button class="nav-tab" data-tab="renewals">
                     <i class="fa-solid fa-bell ml-2"></i>التنبيهات
                     <span id="renewals-count" class="hidden"></span>
+                </button>
+                <button class="nav-tab" data-tab="ads">
+                    <i class="fa-solid fa-bullhorn ml-2"></i>إدارة الإعلانات
                 </button>
                 <button class="nav-tab" data-tab="problems">
                     <i class="fa-solid fa-bug ml-2"></i>المشاكل
@@ -497,11 +503,143 @@
             </div>
         </div>
         
+        <div id="product-stats-section" class="tab-content hidden">
+            <div class="main-card p-4 sm:p-6 mb-8 w-full">
+                <div class="flex justify-between items-center mb-6 flex-wrap gap-4">
+                    <h2 class="text-2xl font-bold text-gray-800">
+                        <i class="fa-solid fa-chart-bar ml-2 text-indigo-600"></i>
+                        إحصائيات المنتجات التفصيلية
+                    </h2>
+                </div>
+                <div id="product-statistics-container" class="space-y-6">
+                    <p class="text-center py-10 text-gray-500">جاري تحميل الإحصائيات...</p>
+                </div>
+            </div>
+        </div>
+
         <div id="renewals-section" class="tab-content hidden">
             <div class="main-card p-4 sm:p-6 w-full">
                 <h2 class="text-2xl font-bold text-gray-800 mb-6">تنبيهات تجديد الاشتراك</h2>
                 <div id="renewals-list-container">
                     <p class="text-center py-10 text-gray-500">جاري تحميل التنبيهات...</p>
+                </div>
+            </div>
+        </div>
+
+        <div id="ads-section" class="tab-content hidden">
+            <div class="main-card p-4 sm:p-6 mb-8 w-full">
+                <div class="flex justify-between items-center mb-6 flex-wrap gap-4">
+                    <h2 class="text-2xl font-bold text-gray-800">
+                        <i class="fa-solid fa-bullhorn ml-2 text-purple-600"></i>
+                        إدارة الحملات الإعلانية
+                    </h2>
+                    <button id="toggle-add-ad-campaign-form" class="primary-btn bg-purple-600 hover:bg-purple-700 text-sm">
+                        <i class="fa-solid fa-plus ml-2"></i> إضافة حملة إعلانية
+                    </button>
+                </div>
+
+                <div id="add-ad-campaign-container" class="collapsible-content">
+                    <div class="mt-4 p-4 lg:p-6 bg-slate-50 rounded-lg border border-slate-200">
+                        <form id="add-ad-campaign-form" class="space-y-4">
+                            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                <div>
+                                    <label class="block mb-1 text-sm font-medium text-gray-700">المنتج</label>
+                                    <select name="productName" class="form-input w-full add-productName" required>
+                                        <option value="">جار تحميل المنتجات...</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block mb-1 text-sm font-medium text-gray-700">المنصة الإعلانية</label>
+                                    <select name="platform" class="form-input w-full" required>
+                                        <option value="">اختر المنصة...</option>
+                                        <option value="Facebook">Facebook</option>
+                                        <option value="Instagram">Instagram</option>
+                                        <option value="Google">Google Ads</option>
+                                        <option value="TikTok">TikTok</option>
+                                        <option value="Snapchat">Snapchat</option>
+                                        <option value="Other">أخرى</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block mb-1 text-sm font-medium text-gray-700">المبلغ المصروف (EGP)</label>
+                                    <input type="number" step="0.01" name="amount" class="form-input w-full" required />
+                                </div>
+                                <div>
+                                    <label class="block mb-1 text-sm font-medium text-gray-700">تاريخ البداية</label>
+                                    <input type="text" id="ad-start-date" name="startDate" class="form-input w-full flatpickr-input" placeholder="اختر التاريخ..." required />
+                                </div>
+                                <div>
+                                    <label class="block mb-1 text-sm font-medium text-gray-700">تاريخ النهاية (اختياري)</label>
+                                    <input type="text" id="ad-end-date" name="endDate" class="form-input w-full flatpickr-input" placeholder="اختر التاريخ..." />
+                                </div>
+                                <div>
+                                    <label class="block mb-1 text-sm font-medium text-gray-700">الحالة</label>
+                                    <select name="status" class="form-input w-full" required>
+                                        <option value="active">نشطة</option>
+                                        <option value="paused">متوقفة مؤقتاً</option>
+                                        <option value="completed">مكتملة</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block mb-1 text-sm font-medium text-gray-700">ملاحظات (اختياري)</label>
+                                <textarea name="notes" class="form-input w-full h-20" placeholder="مثال: حملة الفيسبوك للشهر الحالي..."></textarea>
+                            </div>
+                            <div class="flex justify-center pt-4">
+                                <button type="submit" class="primary-btn w-auto bg-purple-600 hover:bg-purple-700">إضافة الحملة</button>
+                            </div>
+                        </form>
+                    </div>
+                    <hr class="my-6" />
+                </div>
+
+                <!-- Filter Controls -->
+                <div id="ad-product-filter-container" class="my-4 flex flex-wrap gap-2 justify-center">
+                    <button class="filter-btn active" data-product="all">كل المنتجات</button>
+                </div>
+
+                <!-- Ad Campaigns Summary Cards -->
+                <div id="ad-campaigns-summary" class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                    <!-- Summary cards will be rendered here -->
+                </div>
+
+                <!-- Ad Campaigns Table -->
+                <div class="table-container overflow-x-auto">
+                    <table class="w-full">
+                        <thead class="bg-slate-100 sticky top-0 z-10">
+                            <tr class="text-sm font-bold text-gray-700">
+                                <th class="px-4 py-3 text-right">المنتج</th>
+                                <th class="px-4 py-3 text-right">المنصة</th>
+                                <th class="px-4 py-3 text-right">المبلغ</th>
+                                <th class="px-4 py-3 text-right">تاريخ البداية</th>
+                                <th class="px-4 py-3 text-right">تاريخ النهاية</th>
+                                <th class="px-4 py-3 text-right">الحالة</th>
+                                <th class="px-4 py-3 text-right">العائد على الإعلان (ROAS)</th>
+                                <th class="px-4 py-3 text-center">الإجراءات</th>
+                            </tr>
+                        </thead>
+                        <tbody id="ad-campaigns-tbody" class="bg-white">
+                            <tr><td colspan="8" class="text-center py-10 text-gray-500">جاري تحميل البيانات...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Ad Performance Charts -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-8">
+                    <div class="main-card p-6">
+                        <h3 class="text-xl font-bold mb-4 text-gray-800">
+                            <i class="fa-solid fa-chart-line ml-2 text-purple-600"></i>
+                            إنفاق الإعلانات حسب المنصة
+                        </h3>
+                        <div class="h-80"><canvas id="ad-spend-chart"></canvas></div>
+                    </div>
+                    <div class="main-card p-6">
+                        <h3 class="text-xl font-bold mb-4 text-gray-800">
+                            <i class="fa-solid fa-chart-bar ml-2 text-green-600"></i>
+                            العائد على الإعلانات (ROAS)
+                        </h3>
+                        <div class="h-80"><canvas id="roas-chart"></canvas></div>
+                    </div>
                 </div>
             </div>
         </div>

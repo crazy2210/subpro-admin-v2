@@ -335,7 +335,7 @@ const renderData = () => {
     updateAccountsTable(accountsToDisplay);
     updateExpensesTable(expensesToDisplay);
     populateProductFilterButtons();
-    updateProductStatistics(); // New detailed statistics per product
+    // updateProductStatistics is now called separately in real-time listeners
 };
 
 // --- UI UPDATE FUNCTIONS ---
@@ -1019,7 +1019,22 @@ const renderMonthlyChart=(l,r,e,p)=>{const t=document.getElementById("monthly-pe
 // New function for detailed product statistics
 const updateProductStatistics = () => {
     const container = document.getElementById('product-statistics-container');
-    if (!container) return;
+    if (!container) {
+        console.warn('Product statistics container not found');
+        return;
+    }
+    
+    // Check if products exist
+    if (!allProducts || allProducts.length === 0) {
+        container.innerHTML = `
+            <div class="text-center py-10">
+                <i class="fa-solid fa-box-open text-6xl text-gray-300 mb-4"></i>
+                <p class="text-gray-500 text-lg">لا توجد منتجات لعرض إحصائياتها</p>
+                <p class="text-gray-400 text-sm mt-2">قم بإضافة منتجات أولاً من قسم التقارير</p>
+            </div>
+        `;
+        return;
+    }
     
     const confirmedSales = allSales.filter(s => s.isConfirmed);
     const productStats = {};
@@ -1077,6 +1092,18 @@ const updateProductStatistics = () => {
             renewals
         };
     });
+    
+    // Check if we have stats to display
+    if (Object.keys(productStats).length === 0) {
+        container.innerHTML = `
+            <div class="text-center py-10">
+                <i class="fa-solid fa-chart-line text-6xl text-gray-300 mb-4"></i>
+                <p class="text-gray-500 text-lg">لا توجد إحصائيات متاحة</p>
+                <p class="text-gray-400 text-sm mt-2">قم بإضافة مبيعات للمنتجات لعرض الإحصائيات</p>
+            </div>
+        `;
+        return;
+    }
     
     // Render statistics
     container.innerHTML = Object.entries(productStats).map(([productName, stats]) => {
@@ -1398,6 +1425,12 @@ const setupEventListeners = () => {
     });
     document.getElementById('toggle-add-account-form').addEventListener('click', () => document.getElementById('add-account-container').classList.toggle('open'));
     document.getElementById('toggle-add-expense-form').addEventListener('click', () => document.getElementById('add-expense-container').classList.toggle('open'));
+    
+    // Ad Campaign form toggle
+    const adCampaignToggle = document.getElementById('toggle-add-ad-campaign-form');
+    if (adCampaignToggle) {
+        adCampaignToggle.addEventListener('click', () => document.getElementById('add-ad-campaign-container').classList.toggle('open'));
+    }
 
     // FIX: Added event listener for manual sale checkbox
     document.getElementById('manual-sale-checkbox').addEventListener('change', (e) => {
@@ -1423,6 +1456,21 @@ const setupEventListeners = () => {
             }
         }
     });
+    
+    // Ad campaign date pickers
+    if (document.getElementById('ad-start-date')) {
+        adStartDatePicker = flatpickr("#ad-start-date", {
+            dateFormat: "Y-m-d",
+            locale: "ar"
+        });
+    }
+    
+    if (document.getElementById('ad-end-date')) {
+        adEndDatePicker = flatpickr("#ad-end-date", {
+            dateFormat: "Y-m-d",
+            locale: "ar"
+        });
+    }
 
     // Backward compatibility for old shift date filter
     const oldShiftFilter = document.getElementById('shift-date-filter');
@@ -1870,6 +1918,49 @@ const setupFormSubmissions = () => {
         }
     });
 
+    // Ad Campaign Form Handler
+    const adCampaignForm = document.getElementById('add-ad-campaign-form');
+    if (adCampaignForm) {
+        adCampaignForm.addEventListener('submit', async e => {
+            e.preventDefault();
+            const submitBtn = e.target.querySelector('button[type="submit"]');
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'جاري الإضافة...';
+            
+            const formData = new FormData(e.target);
+            const data = Object.fromEntries(formData.entries());
+            
+            try {
+                const startDate = data.startDate ? new Date(data.startDate) : new Date();
+                const campaignData = {
+                    productName: data.productName,
+                    platform: data.platform,
+                    amount: parseFloat(data.amount),
+                    startDate: { seconds: Math.floor(startDate.getTime() / 1000) },
+                    status: data.status || 'active',
+                    notes: data.notes || '',
+                    createdAt: serverTimestamp()
+                };
+                
+                if (data.endDate) {
+                    const endDate = new Date(data.endDate);
+                    campaignData.endDate = { seconds: Math.floor(endDate.getTime() / 1000) };
+                }
+                
+                await addDoc(collection(db, PATH_AD_CAMPAIGNS), campaignData);
+                showNotification("تمت إضافة الحملة الإعلانية بنجاح!", "success");
+                e.target.reset();
+                document.getElementById('add-ad-campaign-container').classList.remove('open');
+            } catch (err) {
+                console.error('Error adding ad campaign:', err);
+                showNotification("حدث خطأ أثناء إضافة الحملة الإعلانية.", "danger");
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'إضافة الحملة';
+            }
+        });
+    }
+
     document.getElementById('edit-sale-form').addEventListener('submit', async e => {
         e.preventDefault();
         if (!hasPermission(PERMISSIONS.EDIT_SALE)) {
@@ -2048,7 +2139,7 @@ const setupFormSubmissions = () => {
 
 const setupDynamicEventListeners = () => {
     document.body.addEventListener('click', async (e) => {
-        const target = e.target.closest('.copyable, .confirm-sale-btn, .edit-sale-btn, .delete-sale-btn, .delete-product-btn, .edit-account-btn, .delete-account-btn, .edit-expense-btn, .delete-expense-btn, .renewal-action-btn');
+        const target = e.target.closest('.copyable, .confirm-sale-btn, .edit-sale-btn, .delete-sale-btn, .delete-product-btn, .edit-account-btn, .delete-account-btn, .edit-expense-btn, .delete-expense-btn, .renewal-action-btn, .delete-ad-campaign-btn');
         if (!target) return;
 
         if (target.matches('.copyable')) {
@@ -2165,6 +2256,17 @@ const setupDynamicEventListeners = () => {
                      await deleteDoc(doc(db, PATH_EXPENSES, target.dataset.id));
                      showNotification("تم الحذف بنجاح.", "danger");
                 } catch (err) { showNotification("حدث خطأ.", "danger"); }
+            }
+        }
+        else if(target.matches('.delete-ad-campaign-btn')) {
+            if (confirm('هل أنت متأكد من حذف هذه الحملة الإعلانية؟')) {
+                try {
+                     await deleteDoc(doc(db, PATH_AD_CAMPAIGNS, target.dataset.id));
+                     showNotification("تم حذف الحملة بنجاح.", "danger");
+                } catch (err) { 
+                    console.error('Error deleting ad campaign:', err);
+                    showNotification("حدث خطأ أثناء الحذف.", "danger"); 
+                }
             }
         }
     });
@@ -2506,12 +2608,60 @@ function renderRenewalsTab() {
 
 // --- ADVERTISING FUNCTIONS ---
 function renderAdvertisingSection() {
+    renderAdCampaignsSummary();
     renderAdCampaignsTable();
     renderAdCharts();
 }
 
+function renderAdCampaignsSummary() {
+    const summaryContainer = document.getElementById('ad-campaigns-summary');
+    if (!summaryContainer) return;
+
+    let campaigns = [...allAdCampaigns];
+    
+    // Apply product filter
+    if (currentAdProductFilter !== 'all') {
+        campaigns = campaigns.filter(c => c.productName === currentAdProductFilter);
+    }
+
+    // Calculate totals
+    const totalSpend = campaigns.reduce((sum, c) => sum + (c.amount || 0), 0);
+    const activeCampaigns = campaigns.filter(c => c.status === 'active').length;
+    
+    // Calculate revenue from sales for ROAS
+    const campaignProducts = [...new Set(campaigns.map(c => c.productName))];
+    const relevantSales = allSales.filter(s => s.isConfirmed && campaignProducts.includes(s.productName));
+    const totalRevenue = relevantSales.reduce((sum, s) => sum + (s.sellingPrice || 0), 0);
+    const roas = totalSpend > 0 ? (totalRevenue / totalSpend).toFixed(2) : '0.00';
+    
+    // Calculate profit
+    const totalCost = relevantSales.reduce((sum, s) => sum + (s.costPrice || 0), 0);
+    const profit = totalRevenue - totalCost - totalSpend;
+
+    summaryContainer.innerHTML = `
+        <div class="stat-card bg-gradient-to-br from-purple-500 to-pink-600">
+            <p class="font-semibold text-white/90">إجمالي الإنفاق الإعلاني</p>
+            <p class="text-3xl font-bold mt-2">${totalSpend.toFixed(2)} EGP</p>
+        </div>
+        <div class="stat-card bg-gradient-to-br from-blue-500 to-indigo-600">
+            <p class="font-semibold text-white/90">الحملات النشطة</p>
+            <p class="text-3xl font-bold mt-2">${activeCampaigns}</p>
+        </div>
+        <div class="stat-card bg-gradient-to-br from-green-500 to-emerald-600">
+            <p class="font-semibold text-white/90">العائد على الإعلانات (ROAS)</p>
+            <p class="text-3xl font-bold mt-2">${roas}x</p>
+        </div>
+        <div class="stat-card bg-gradient-to-br from-${profit >= 0 ? 'green' : 'red'}-500 to-${profit >= 0 ? 'emerald' : 'rose'}-600">
+            <p class="font-semibold text-white/90">الربح الصافي</p>
+            <p class="text-3xl font-bold mt-2">${profit.toFixed(2)} EGP</p>
+        </div>
+    `;
+}
+
 function renderAdCampaignsTable() {
     const tbody = document.getElementById('ad-campaigns-tbody');
+    if (!tbody) return;
+    
     let campaigns = [...allAdCampaigns];
 
     // Apply product filter
@@ -2520,7 +2670,7 @@ function renderAdCampaignsTable() {
     }
 
     if (campaigns.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" class="text-center py-10 text-gray-500">لا توجد حملات إعلانية</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" class="text-center py-10 text-gray-500">لا توجد حملات إعلانية</td></tr>';
         return;
     }
 
@@ -2531,6 +2681,30 @@ function renderAdCampaignsTable() {
             new Date(campaign.endDate.seconds * 1000).toLocaleDateString('ar-EG') : 'مستمرة';
 
         const platformClass = `platform-${campaign.platform.toLowerCase()}`;
+        
+        // Calculate ROAS for this specific campaign
+        const productSales = allSales.filter(s => 
+            s.isConfirmed && 
+            s.productName === campaign.productName &&
+            s.date?.seconds && campaign.startDate?.seconds &&
+            s.date.seconds >= campaign.startDate.seconds &&
+            (!campaign.endDate?.seconds || s.date.seconds <= campaign.endDate.seconds)
+        );
+        
+        const campaignRevenue = productSales.reduce((sum, s) => sum + (s.sellingPrice || 0), 0);
+        const campaignROAS = campaign.amount > 0 ? (campaignRevenue / campaign.amount).toFixed(2) : '0.00';
+        
+        // Status badge
+        const statusColors = {
+            'active': 'bg-green-100 text-green-800',
+            'paused': 'bg-yellow-100 text-yellow-800',
+            'completed': 'bg-gray-100 text-gray-800'
+        };
+        const statusText = {
+            'active': 'نشطة',
+            'paused': 'متوقفة',
+            'completed': 'مكتملة'
+        };
 
         return `
             <tr class="ad-campaign-row">
@@ -2543,15 +2717,25 @@ function renderAdCampaignsTable() {
                 <td class="px-4 py-3" data-label="المبلغ">
                     <span class="font-bold text-purple-600">${campaign.amount.toFixed(2)} EGP</span>
                 </td>
-                <td class="px-4 py-3" data-label="التاريخ">
-                    <div class="text-sm">
-                        <p>${startDate}</p>
-                        <p class="text-gray-500 text-xs">${endDate}</p>
-                    </div>
+                <td class="px-4 py-3" data-label="تاريخ البداية">
+                    <span class="text-sm">${startDate}</span>
+                </td>
+                <td class="px-4 py-3" data-label="تاريخ النهاية">
+                    <span class="text-sm">${endDate}</span>
+                </td>
+                <td class="px-4 py-3" data-label="الحالة">
+                    <span class="px-3 py-1 text-xs font-semibold rounded-full ${statusColors[campaign.status] || statusColors.active}">
+                        ${statusText[campaign.status] || 'نشطة'}
+                    </span>
+                </td>
+                <td class="px-4 py-3" data-label="ROAS">
+                    <span class="font-bold ${parseFloat(campaignROAS) >= 2 ? 'text-green-600' : parseFloat(campaignROAS) >= 1 ? 'text-blue-600' : 'text-red-600'}">
+                        ${campaignROAS}x
+                    </span>
                 </td>
                 <td class="px-4 py-3" data-label="الإجراءات">
-                    <div class="flex gap-2">
-                        <button class="text-red-500 hover:text-red-700 delete-ad-campaign-btn" data-id="${campaign.id}">
+                    <div class="flex gap-2 justify-center">
+                        <button class="text-red-500 hover:text-red-700 delete-ad-campaign-btn" data-id="${campaign.id}" title="حذف">
                             <i class="fa-solid fa-trash"></i>
                         </button>
                     </div>
@@ -2654,20 +2838,28 @@ function renderAdCharts() {
 }
 
 function updateAdProductFilters() {
-    const container = document.querySelector('.ad-product-filter')?.parentElement;
+    const container = document.getElementById('ad-product-filter-container');
     if (!container) return;
     
-    container.innerHTML = '<button class="filter-btn active ad-product-filter" data-product="all">كل المنتجات</button>';
+    let html = '<button class="filter-btn active" data-product="all">كل المنتجات</button>';
     
     allProducts.forEach(product => {
         const count = allAdCampaigns.filter(c => c.productName === product.name).length;
         if (count > 0) {
-            const btn = document.createElement('button');
-            btn.className = 'filter-btn ad-product-filter';
-            btn.dataset.product = product.name;
-            btn.textContent = `${product.name} (${count})`;
-            container.appendChild(btn);
+            html += `<button class="filter-btn" data-product="${product.name}">${product.name} (${count})</button>`;
         }
+    });
+    
+    container.innerHTML = html;
+    
+    // Add event listeners for filter buttons
+    container.querySelectorAll('.filter-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            currentAdProductFilter = btn.dataset.product;
+            container.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            renderAdvertisingSection();
+        });
     });
 }
 
@@ -2740,6 +2932,7 @@ async function initializeAppAndListeners() {
         populateProductDropdowns();
         renderProductList();
         renderData();
+        updateProductStatistics();
         renderAdvertisingSection();
         updateAdProductFilters();
         
@@ -2784,6 +2977,7 @@ async function initializeAppAndListeners() {
             allSales = snap.docs.map(d => ({ id: d.id, ...d.data() })); 
             renderData(); 
             renderRenewalsTab();
+            updateProductStatistics();
             if (shiftDatePicker && shiftDatePicker.selectedDates.length > 0) {
                 renderShiftStatistics(shiftDatePicker.selectedDates[0]);
             }
@@ -2825,6 +3019,7 @@ async function initializeAppAndListeners() {
             populateProductDropdowns(); 
             renderProductList(); 
             renderData();
+            updateProductStatistics();
             updateAdProductFilters();
         },
         error => {
