@@ -335,7 +335,7 @@ const renderData = () => {
     updateAccountsTable(accountsToDisplay);
     updateExpensesTable(expensesToDisplay);
     populateProductFilterButtons();
-    updateProductStatistics(); // New detailed statistics per product
+    // updateProductStatistics is now called separately in real-time listeners
 };
 
 // --- UI UPDATE FUNCTIONS ---
@@ -1019,7 +1019,22 @@ const renderMonthlyChart=(l,r,e,p)=>{const t=document.getElementById("monthly-pe
 // New function for detailed product statistics
 const updateProductStatistics = () => {
     const container = document.getElementById('product-statistics-container');
-    if (!container) return;
+    if (!container) {
+        console.warn('Product statistics container not found');
+        return;
+    }
+    
+    // Check if products exist
+    if (!allProducts || allProducts.length === 0) {
+        container.innerHTML = `
+            <div class="text-center py-10">
+                <i class="fa-solid fa-box-open text-6xl text-gray-300 mb-4"></i>
+                <p class="text-gray-500 text-lg">لا توجد منتجات لعرض إحصائياتها</p>
+                <p class="text-gray-400 text-sm mt-2">قم بإضافة منتجات أولاً من قسم التقارير</p>
+            </div>
+        `;
+        return;
+    }
     
     const confirmedSales = allSales.filter(s => s.isConfirmed);
     const productStats = {};
@@ -1077,6 +1092,18 @@ const updateProductStatistics = () => {
             renewals
         };
     });
+    
+    // Check if we have stats to display
+    if (Object.keys(productStats).length === 0) {
+        container.innerHTML = `
+            <div class="text-center py-10">
+                <i class="fa-solid fa-chart-line text-6xl text-gray-300 mb-4"></i>
+                <p class="text-gray-500 text-lg">لا توجد إحصائيات متاحة</p>
+                <p class="text-gray-400 text-sm mt-2">قم بإضافة مبيعات للمنتجات لعرض الإحصائيات</p>
+            </div>
+        `;
+        return;
+    }
     
     // Render statistics
     container.innerHTML = Object.entries(productStats).map(([productName, stats]) => {
@@ -2905,6 +2932,7 @@ async function initializeAppAndListeners() {
         populateProductDropdowns();
         renderProductList();
         renderData();
+        updateProductStatistics();
         renderAdvertisingSection();
         updateAdProductFilters();
         
@@ -2949,6 +2977,7 @@ async function initializeAppAndListeners() {
             allSales = snap.docs.map(d => ({ id: d.id, ...d.data() })); 
             renderData(); 
             renderRenewalsTab();
+            updateProductStatistics();
             if (shiftDatePicker && shiftDatePicker.selectedDates.length > 0) {
                 renderShiftStatistics(shiftDatePicker.selectedDates[0]);
             }
@@ -2990,6 +3019,7 @@ async function initializeAppAndListeners() {
             populateProductDropdowns(); 
             renderProductList(); 
             renderData();
+            updateProductStatistics();
             updateAdProductFilters();
         },
         error => {
