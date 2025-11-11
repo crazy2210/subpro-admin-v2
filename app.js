@@ -336,6 +336,11 @@ const renderData = () => {
     updateExpensesTable(expensesToDisplay);
     populateProductFilterButtons();
     updateProductStatistics(); // New detailed statistics per product
+    
+    // Update shift statistics if on reports tab and date picker is initialized
+    if (shiftDatePicker && shiftDatePicker.selectedDates.length > 0) {
+        renderShiftStatistics(shiftDatePicker.selectedDates[0]);
+    }
 };
 
 // --- UI UPDATE FUNCTIONS ---
@@ -2046,7 +2051,74 @@ const setupFormSubmissions = () => {
     });
 };
 
+// Update bulk confirm button state
+const updateBulkConfirmButton = () => {
+    const selectedCheckboxes = document.querySelectorAll('.sale-checkbox:checked');
+    const bulkConfirmBtn = document.getElementById('bulk-confirm-btn');
+    const bulkConfirmCount = document.getElementById('bulk-confirm-count');
+    
+    if (!bulkConfirmBtn || !bulkConfirmCount) return;
+    
+    const count = selectedCheckboxes.length;
+    bulkConfirmCount.textContent = count;
+    
+    if (count > 0) {
+        bulkConfirmBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+        bulkConfirmBtn.classList.add('hover:bg-indigo-700');
+    } else {
+        bulkConfirmBtn.classList.add('opacity-50', 'cursor-not-allowed');
+        bulkConfirmBtn.classList.remove('hover:bg-indigo-700');
+    }
+};
+
 const setupDynamicEventListeners = () => {
+    // Bulk confirmation checkboxes handling
+    document.body.addEventListener('change', (e) => {
+        if (e.target.matches('.sale-checkbox')) {
+            updateBulkConfirmButton();
+        }
+    });
+    
+    // Select all checkbox
+    document.body.addEventListener('change', (e) => {
+        if (e.target.matches('#select-all-checkbox')) {
+            const isChecked = e.target.checked;
+            document.querySelectorAll('.sale-checkbox').forEach(cb => {
+                cb.checked = isChecked;
+            });
+            updateBulkConfirmButton();
+        }
+    });
+    
+    // Bulk confirm button
+    document.body.addEventListener('click', async (e) => {
+        if (e.target.closest('#bulk-confirm-btn')) {
+            const selectedCheckboxes = document.querySelectorAll('.sale-checkbox:checked');
+            if (selectedCheckboxes.length === 0) return;
+            
+            if (!hasPermission(PERMISSIONS.CONFIRM_SALE)) {
+                showNotification('ليس لديك صلاحية لتأكيد المبيعات', 'danger');
+                return;
+            }
+            
+            if (confirm(`هل أنت متأكد من تأكيد ${selectedCheckboxes.length} أوردر؟`)) {
+                const saleIds = Array.from(selectedCheckboxes).map(cb => cb.dataset.id);
+                const batch = writeBatch(db);
+                
+                saleIds.forEach(id => {
+                    batch.update(doc(db, PATH_SALES, id), { isConfirmed: true });
+                });
+                
+                try {
+                    await batch.commit();
+                    showNotification(`تم تأكيد ${saleIds.length} أوردر بنجاح!`, 'success');
+                } catch (err) {
+                    showNotification('حدث خطأ في التأكيد الجماعي', 'danger');
+                }
+            }
+        }
+    });
+    
     document.body.addEventListener('click', async (e) => {
         const target = e.target.closest('.copyable, .confirm-sale-btn, .edit-sale-btn, .delete-sale-btn, .delete-product-btn, .edit-account-btn, .delete-account-btn, .edit-expense-btn, .delete-expense-btn, .renewal-action-btn');
         if (!target) return;
@@ -2858,6 +2930,13 @@ async function initializeAppAndListeners() {
             showNotification("فقد الاتصال بقاعدة بيانات الحملات الإعلانية. جاري إعادة المحاولة...", "danger");
         }
     );
+    
+    // Setup periodic update for Live Dashboard Header (every 30 seconds)
+    setInterval(() => {
+        if (allSales.length > 0 && allAccounts.length > 0) {
+            updateEnhancedDashboardHeader(allSales, allAccounts);
+        }
+    }, 30000); // Update every 30 seconds
 }
 
 initializeAppAndListeners();
