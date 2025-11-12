@@ -303,7 +303,14 @@ const renderData = () => {
     if(currentAccountsStatusFilter !== 'all'){
         accountsToDisplay = accountsToDisplay.filter(a => {
             if (currentAccountsStatusFilter === 'available') {
-                return a.is_active && a.current_uses < a.allowed_uses;
+                // متاح: نشط وليس مستخدم بالكامل وليس تالف
+                return a.is_active && a.current_uses < a.allowed_uses && a.status !== 'damaged';
+            } else if (currentAccountsStatusFilter === 'used') {
+                // مستخدم: نشط ومستخدم جزئياً أو كلياً (ليس صفر)
+                return a.is_active && a.current_uses > 0;
+            } else if (currentAccountsStatusFilter === 'damaged') {
+                // تالف: الحساب معطوب/تالف
+                return a.status === 'damaged';
             } else if (currentAccountsStatusFilter === 'unavailable') {
                 return !a.is_active || a.current_uses >= a.allowed_uses;
             } else if (currentAccountsStatusFilter === 'inactive') {
@@ -1338,6 +1345,17 @@ const setupEventListeners = () => {
             currentAccountsProductFilter = e.target.closest('.filter-btn').dataset.product;
             renderData();
         }
+        // فلتر حالة الأكونتات الجديد
+        if(e.target.closest('#accounts-status-filter-container .filter-btn')){
+            const statusBtn = e.target.closest('.filter-btn');
+            currentAccountsStatusFilter = statusBtn.dataset.status;
+            // تحديث الأزرار النشطة
+            document.querySelectorAll('#accounts-status-filter-container .filter-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            statusBtn.classList.add('active');
+            renderData();
+        }
     });
     
     // Accounts status filter
@@ -1847,27 +1865,28 @@ const setupFormSubmissions = () => {
         submitBtn.disabled = true; submitBtn.textContent = 'جاري الإضافة...';
         const formData = new FormData(e.target);
         const data = Object.fromEntries(formData.entries());
-        const customDate = data.customDate;
-        const expenseDate = customDate ? new Date(customDate) : null;
         
         try {
+            // استخدام التاريخ المحدد من المستخدم (إلزامي الآن)
+            const expenseDate = data.expense_date ? new Date(data.expense_date) : new Date();
+            
             const expenseData = {
                 type: data.type,
                 category: data.category || '',
                 amount: parseFloat(data.amount),
                 description: data.description || '',
-                date: serverTimestamp()
+                date: { seconds: Math.floor(expenseDate.getTime() / 1000) },
+                createdAt: serverTimestamp()
             };
-            
-            if (expenseDate) {
-                expenseData.customDate = { seconds: Math.floor(expenseDate.getTime() / 1000) };
-            }
             
             await addDoc(collection(db, PATH_EXPENSES), expenseData);
             showNotification("تمت إضافة المصروف بنجاح!", "success");
             e.target.reset();
+            // تعيين التاريخ الافتراضي إلى اليوم
+            document.getElementById('expense-date-input').valueAsDate = new Date();
             document.getElementById('add-expense-container').classList.remove('open');
         } catch (err) { 
+            console.error('خطأ في إضافة المصروف:', err);
             showNotification("حدث خطأ أثناء إضافة المصروف.", "danger");
         } finally {
             submitBtn.disabled = false;
@@ -2305,9 +2324,9 @@ function calculateShiftStats(salesData, selectedDate) {
     });
 
     const shiftData = {
-        NIGHT: { orders: [], revenue: 0, profit: 0, count: 0 },
-        MORNING: { orders: [], revenue: 0, profit: 0, count: 0 },
-        EVENING: { orders: [], revenue: 0, profit: 0, count: 0 }
+        NIGHT: { orders: [], revenue: 0, profit: 0, count: 0, accountsUsed: new Set(), productBreakdown: {} },
+        MORNING: { orders: [], revenue: 0, profit: 0, count: 0, accountsUsed: new Set(), productBreakdown: {} },
+        EVENING: { orders: [], revenue: 0, profit: 0, count: 0, accountsUsed: new Set(), productBreakdown: {} }
     };
 
     dayOrders.forEach(sale => {
@@ -2319,6 +2338,29 @@ function calculateShiftStats(salesData, selectedDate) {
         shiftData[shift].revenue += sale.sellingPrice || 0;
         shiftData[shift].profit += (sale.sellingPrice || 0) - (sale.costPrice || 0);
         shiftData[shift].count++;
+        
+        // تتبع الأكونتات المستخدمة
+        if (sale.accountId) {
+            shiftData[shift].accountsUsed.add(sale.accountId);
+        }
+        
+        // تفصيل حسب المنتج
+        const product = sale.product || 'غير محدد';
+        if (!shiftData[shift].productBreakdown[product]) {
+            shiftData[shift].productBreakdown[product] = {
+                count: 0,
+                revenue: 0,
+                profit: 0
+            };
+        }
+        shiftData[shift].productBreakdown[product].count++;
+        shiftData[shift].productBreakdown[product].revenue += (sale.sellingPrice || 0);
+        shiftData[shift].productBreakdown[product].profit += (sale.sellingPrice || 0) - (sale.costPrice || 0);
+    });
+    
+    // تحويل Set إلى عدد
+    Object.keys(shiftData).forEach(shift => {
+        shiftData[shift].accountsCount = shiftData[shift].accountsUsed.size;
     });
 
     return shiftData;
@@ -2331,25 +2373,36 @@ function renderShiftStatistics(date) {
     const totalDayOrders = Object.values(shiftStats).reduce((sum, shift) => sum + shift.count, 0);
     const totalDayRevenue = Object.values(shiftStats).reduce((sum, shift) => sum + shift.revenue, 0);
     const totalDayProfit = Object.values(shiftStats).reduce((sum, shift) => sum + shift.profit, 0);
+    const totalAccountsUsed = new Set(Object.values(shiftStats).flatMap(s => Array.from(s.accountsUsed))).size;
 
     let html = `
         <div class="main-card p-6 mb-6">
-            <h3 class="text-2xl font-bold text-gray-800 mb-4">
-                <i class="fa-solid fa-calendar-day ml-2 text-indigo-600"></i>
-                ملخص ${date.toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-            </h3>
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-2xl font-bold text-gray-800">
+                    <i class="fa-solid fa-calendar-day ml-2 text-indigo-600"></i>
+                    ملخص ${date.toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                </h3>
+                <button onclick="exportShiftReport('${date.toISOString()}')" class="primary-btn bg-green-600 hover:bg-green-700 text-sm">
+                    <i class="fas fa-file-excel ml-2"></i>
+                    تصدير التقرير
+                </button>
+            </div>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div class="stat-card bg-gradient-to-br from-green-500 to-emerald-600">
                     <p class="font-semibold text-white/90">إجمالي الطلبات</p>
                     <p class="text-4xl font-bold mt-2">${totalDayOrders}</p>
                 </div>
                 <div class="stat-card bg-gradient-to-br from-blue-500 to-indigo-600">
+                    <p class="font-semibold text-white/90">الأكونتات المستخدمة</p>
+                    <p class="text-4xl font-bold mt-2">${totalAccountsUsed}</p>
+                </div>
+                <div class="stat-card bg-gradient-to-br from-cyan-500 to-blue-600">
                     <p class="font-semibold text-white/90">إجمالي الإيرادات</p>
-                    <p class="text-4xl font-bold mt-2">${totalDayRevenue.toFixed(2)} EGP</p>
+                    <p class="text-3xl font-bold mt-2">${totalDayRevenue.toFixed(2)} EGP</p>
                 </div>
                 <div class="stat-card bg-gradient-to-br from-purple-500 to-pink-600">
                     <p class="font-semibold text-white/90">إجمالي الربح</p>
-                    <p class="text-4xl font-bold mt-2">${totalDayProfit.toFixed(2)} EGP</p>
+                    <p class="text-3xl font-bold mt-2">${totalDayProfit.toFixed(2)} EGP</p>
                 </div>
             </div>
         </div>
@@ -2365,7 +2418,10 @@ function renderShiftStatistics(date) {
             <div class="shift-card">
                 <div class="shift-header">
                     <div>
-                        <h4 class="text-xl font-bold text-gray-800">${shift.name}</h4>
+                        <h4 class="text-xl font-bold text-gray-800">
+                            <i class="fas ${shift.icon} ml-2"></i>
+                            ${shift.name}
+                        </h4>
                         <p class="text-sm text-gray-600">${shift.start}:00 - ${shift.end}:00</p>
                     </div>
                     <div class="stat-card bg-gradient-to-br ${shift.color} px-4 py-2">
@@ -2376,54 +2432,114 @@ function renderShiftStatistics(date) {
                 
                 <div class="shift-stats">
                     <div class="shift-stat-item">
-                        <p class="text-xs text-gray-600 mb-1">النسبة المئوية</p>
+                        <p class="text-xs text-gray-600 mb-1"><i class="fas fa-chart-pie ml-1"></i>النسبة المئوية</p>
                         <p class="text-lg font-bold text-indigo-600">${percentage}%</p>
                     </div>
                     <div class="shift-stat-item">
-                        <p class="text-xs text-gray-600 mb-1">الإيرادات</p>
+                        <p class="text-xs text-gray-600 mb-1"><i class="fas fa-user-circle ml-1"></i>الأكونتات</p>
+                        <p class="text-lg font-bold text-cyan-600">${data.accountsCount || 0}</p>
+                    </div>
+                    <div class="shift-stat-item">
+                        <p class="text-xs text-gray-600 mb-1"><i class="fas fa-dollar-sign ml-1"></i>الإيرادات</p>
                         <p class="text-lg font-bold text-green-600">${data.revenue.toFixed(2)}</p>
                     </div>
                     <div class="shift-stat-item">
-                        <p class="text-xs text-gray-600 mb-1">الربح</p>
+                        <p class="text-xs text-gray-600 mb-1"><i class="fas fa-coins ml-1"></i>الربح</p>
                         <p class="text-lg font-bold ${data.profit >= 0 ? 'text-emerald-600' : 'text-red-600'}">${data.profit.toFixed(2)}</p>
-                    </div>
-                    <div class="shift-stat-item">
-                        <p class="text-xs text-gray-600 mb-1">متوسط الربح/طلب</p>
-                        <p class="text-lg font-bold text-purple-600">${data.count > 0 ? (data.profit / data.count).toFixed(2) : '0.00'}</p>
                     </div>
                 </div>
 
-                ${data.orders.length > 0 ? `
+                ${Object.keys(data.productBreakdown).length > 0 ? `
                     <div class="mt-4 pt-4 border-t border-gray-300">
-                        <h5 class="font-semibold text-gray-700 mb-2">
-                            <i class="fa-solid fa-list ml-1"></i>
-                            الطلبات (${data.orders.length})
+                        <h5 class="font-semibold text-gray-700 mb-3">
+                            <i class="fas fa-box ml-1"></i>
+                            تفصيل المنتجات
                         </h5>
-                        <div class="space-y-2 max-h-64 overflow-y-auto">
-                            ${data.orders.map(order => {
-                                const orderTime = new Date(order.date.seconds * 1000);
-                                return `
-                                    <div class="bg-gray-50 p-2 rounded text-xs">
-                                        <div class="flex justify-between items-center">
-                                            <span class="font-semibold">${order.contactInfo || 'N/A'}</span>
-                                            <span class="text-gray-500">${orderTime.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}</span>
+                        <div class="space-y-2">
+                            ${Object.entries(data.productBreakdown).map(([product, stats]) => `
+                                <div class="bg-gradient-to-l from-gray-50 to-white p-3 rounded-lg border border-gray-200">
+                                    <div class="flex justify-between items-center mb-1">
+                                        <span class="font-semibold text-gray-800">${product}</span>
+                                        <span class="badge bg-indigo-100 text-indigo-700 px-2 py-1 text-xs rounded-full">${stats.count} طلب</span>
+                                    </div>
+                                    <div class="grid grid-cols-2 gap-2 text-xs mt-2">
+                                        <div class="flex justify-between">
+                                            <span class="text-gray-600">الإيرادات:</span>
+                                            <span class="font-bold text-green-600">${stats.revenue.toFixed(2)} EGP</span>
                                         </div>
-                                        <div class="flex justify-between mt-1">
-                                            <span>${order.productName}</span>
-                                            <span class="font-bold text-green-600">${((order.sellingPrice || 0) - (order.costPrice || 0)).toFixed(2)} EGP</span>
+                                        <div class="flex justify-between">
+                                            <span class="text-gray-600">الربح:</span>
+                                            <span class="font-bold text-purple-600">${stats.profit.toFixed(2)} EGP</span>
                                         </div>
                                     </div>
-                                `;
-                            }).join('')}
+                                </div>
+                            `).join('')}
                         </div>
                     </div>
-                ` : '<p class="text-center text-gray-500 mt-4">لا توجد طلبات في هذا الشيفت</p>'}
+                ` : '<p class="text-center text-gray-500 mt-4 py-3 bg-gray-50 rounded">لا توجد طلبات في هذا الشيفت</p>'}
             </div>
         `;
     });
 
     html += '</div>';
     container.innerHTML = html;
+}
+
+// دالة تصدير تقرير الشيفت
+function exportShiftReport(dateString) {
+    const date = new Date(dateString);
+    const shiftStats = calculateShiftStats(allSales, date);
+    
+    // تحضير البيانات للتصدير
+    const exportData = [];
+    
+    // إضافة الملخص العام
+    exportData.push({
+        'الشيفت': 'الإجمالي',
+        'عدد الطلبات': Object.values(shiftStats).reduce((sum, s) => sum + s.count, 0),
+        'عدد الأكونتات': new Set(Object.values(shiftStats).flatMap(s => Array.from(s.accountsUsed))).size,
+        'الإيرادات': Object.values(shiftStats).reduce((sum, s) => sum + s.revenue, 0).toFixed(2),
+        'الربح': Object.values(shiftStats).reduce((sum, s) => sum + s.profit, 0).toFixed(2),
+        'المنتج': '-',
+        'عدد منتج': '-'
+    });
+    
+    // إضافة تفاصيل كل شيفت
+    Object.entries(SHIFTS).forEach(([key, shift]) => {
+        const data = shiftStats[key];
+        
+        // إضافة ملخص الشيفت
+        exportData.push({
+            'الشيفت': shift.name,
+            'عدد الطلبات': data.count,
+            'عدد الأكونتات': data.accountsCount || 0,
+            'الإيرادات': data.revenue.toFixed(2),
+            'الربح': data.profit.toFixed(2),
+            'المنتج': '-',
+            'عدد منتج': '-'
+        });
+        
+        // إضافة تفصيل المنتجات
+        Object.entries(data.productBreakdown).forEach(([product, stats]) => {
+            exportData.push({
+                'الشيفت': '',
+                'عدد الطلبات': '',
+                'عدد الأكونتات': '',
+                'الإيرادات': '',
+                'الربح': '',
+                'المنتج': product,
+                'عدد منتج': stats.count
+            });
+        });
+    });
+    
+    // تصدير إلى Excel
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'تقرير الشيفتات');
+    XLSX.writeFile(wb, `shift_report_${date.toISOString().split('T')[0]}.xlsx`);
+    
+    showNotification('تم تصدير التقرير بنجاح', 'success');
 }
 
 // --- RENEWALS SYSTEM FUNCTIONS ---
@@ -2940,3 +3056,251 @@ async function initializeAppAndListeners() {
 }
 
 initializeAppAndListeners();
+
+// ============================================
+// PRODUCT STATISTICS - نظام إحصائيات المنتجات
+// ============================================
+
+let productStatsDateRange = { start: null, end: null };
+let productStatsFlatpickr = null;
+
+function initProductStatistics() {
+    // تهيئة منتقي التاريخ
+    const dateInput = document.getElementById('product-stats-date-filter');
+    if (dateInput) {
+        productStatsFlatpickr = flatpickr(dateInput, {
+            mode: "range",
+            dateFormat: "Y-m-d",
+            locale: "ar",
+            onChange: function(selectedDates) {
+                if (selectedDates.length === 2) {
+                    productStatsDateRange.start = new Date(selectedDates[0].setHours(0, 0, 0, 0));
+                    productStatsDateRange.end = new Date(selectedDates[1].setHours(23, 59, 59, 999));
+                    renderProductStatistics();
+                } else if (selectedDates.length === 0) {
+                    productStatsDateRange.start = null;
+                    productStatsDateRange.end = null;
+                    renderProductStatistics();
+                }
+            }
+        });
+    }
+    
+    // زر مسح الفلتر
+    const clearBtn = document.getElementById('clear-product-stats-date-btn');
+    if (clearBtn) {
+        clearBtn.addEventListener('click', () => {
+            if (productStatsFlatpickr) productStatsFlatpickr.clear();
+            productStatsDateRange = { start: null, end: null };
+            renderProductStatistics();
+        });
+    }
+    
+    // زر التحديث
+    const refreshBtn = document.getElementById('refresh-product-stats-btn');
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', () => renderProductStatistics());
+    }
+    
+    // زر التصدير
+    const exportBtn = document.getElementById('export-product-stats-btn');
+    if (exportBtn) {
+        exportBtn.addEventListener('click', () => exportProductStatistics());
+    }
+}
+
+function calculateProductStatistics() {
+    let filteredSales = [...allSales];
+    
+    if (productStatsDateRange.start && productStatsDateRange.end) {
+        filteredSales = filteredSales.filter(sale => {
+            const saleDate = sale.date?.seconds ? new Date(sale.date.seconds * 1000) : null;
+            return saleDate && saleDate >= productStatsDateRange.start && saleDate <= productStatsDateRange.end;
+        });
+    }
+    
+    const totalRevenue = filteredSales.reduce((sum, s) => sum + (s.sellingPrice || 0), 0);
+    const totalCost = filteredSales.reduce((sum, s) => sum + (s.costPrice || 0), 0);
+    const totalProfit = totalRevenue - totalCost;
+    
+    const productStats = {};
+    
+    filteredSales.forEach(sale => {
+        const productName = sale.productName || 'غير محدد';
+        
+        if (!productStats[productName]) {
+            productStats[productName] = {
+                productName: productName,
+                orderCount: 0,
+                revenue: 0,
+                cost: 0,
+                profit: 0,
+                averagePrice: 0
+            };
+        }
+        
+        productStats[productName].orderCount++;
+        productStats[productName].revenue += (sale.sellingPrice || 0);
+        productStats[productName].cost += (sale.costPrice || 0);
+        productStats[productName].profit += (sale.sellingPrice || 0) - (sale.costPrice || 0);
+    });
+    
+    Object.keys(productStats).forEach(productName => {
+        const stats = productStats[productName];
+        stats.averagePrice = stats.orderCount > 0 ? stats.revenue / stats.orderCount : 0;
+        stats.percentage = totalRevenue > 0 ? (stats.revenue / totalRevenue * 100).toFixed(2) : 0;
+    });
+    
+    const statsArray = Object.values(productStats).sort((a, b) => b.revenue - a.revenue);
+    
+    return {
+        products: statsArray,
+        totals: {
+            totalProducts: statsArray.length,
+            totalOrders: filteredSales.length,
+            totalRevenue: totalRevenue,
+            totalCost: totalCost,
+            totalProfit: totalProfit
+        }
+    };
+}
+
+function renderProductStatistics() {
+    const stats = calculateProductStatistics();
+    
+    const totalProductsEl = document.getElementById('total-products-count');
+    const totalOrdersEl = document.getElementById('total-product-orders');
+    const totalRevenueEl = document.getElementById('total-product-revenue');
+    const totalProfitEl = document.getElementById('total-product-profit');
+    
+    if (totalProductsEl) totalProductsEl.textContent = stats.totals.totalProducts;
+    if (totalOrdersEl) totalOrdersEl.textContent = stats.totals.totalOrders;
+    if (totalRevenueEl) totalRevenueEl.textContent = `${stats.totals.totalRevenue.toFixed(2)} EGP`;
+    if (totalProfitEl) totalProfitEl.textContent = `${stats.totals.totalProfit.toFixed(2)} EGP`;
+    
+    const tbody = document.getElementById('product-stats-tbody');
+    if (!tbody) return;
+    
+    tbody.innerHTML = '';
+    
+    if (stats.products.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="7" class="px-4 py-10 text-center text-gray-500">
+                    <i class="fas fa-info-circle text-4xl mb-2 block"></i>
+                    لا توجد بيانات لعرضها
+                </td>
+            </tr>
+        `;
+        return;
+    }
+    
+    stats.products.forEach((product, index) => {
+        const row = document.createElement('tr');
+        row.className = 'hover:bg-gray-50 transition-colors';
+        
+        const profitColor = product.profit >= 0 ? 'text-green-600' : 'text-red-600';
+        
+        row.innerHTML = `
+            <td class="px-4 py-3" data-label="المنتج">
+                <div class="flex items-center gap-2">
+                    <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 text-sm font-bold">
+                        ${index + 1}
+                    </span>
+                    <span class="font-semibold text-gray-800">${product.productName}</span>
+                </div>
+            </td>
+            <td class="px-4 py-3" data-label="عدد الطلبات">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                    ${product.orderCount} طلب
+                </span>
+            </td>
+            <td class="px-4 py-3 font-semibold text-cyan-600" data-label="الإيرادات">
+                ${product.revenue.toFixed(2)} EGP
+            </td>
+            <td class="px-4 py-3 font-semibold text-orange-600" data-label="التكلفة">
+                ${product.cost.toFixed(2)} EGP
+            </td>
+            <td class="px-4 py-3 font-bold ${profitColor}" data-label="الربح">
+                ${product.profit.toFixed(2)} EGP
+            </td>
+            <td class="px-4 py-3" data-label="النسبة">
+                <div class="flex items-center gap-2">
+                    <div class="flex-1 bg-gray-200 rounded-full h-2">
+                        <div class="bg-indigo-600 h-2 rounded-full transition-all" style="width: ${product.percentage}%"></div>
+                    </div>
+                    <span class="text-sm font-semibold text-gray-700">${product.percentage}%</span>
+                </div>
+            </td>
+            <td class="px-4 py-3 font-semibold text-purple-600" data-label="متوسط السعر">
+                ${product.averagePrice.toFixed(2)} EGP
+            </td>
+        `;
+        
+        tbody.appendChild(row);
+    });
+}
+
+function exportProductStatistics() {
+    const stats = calculateProductStatistics();
+    
+    const exportData = stats.products.map((product, index) => ({
+        'الترتيب': index + 1,
+        'المنتج': product.productName,
+        'عدد الطلبات': product.orderCount,
+        'الإيرادات': product.revenue.toFixed(2),
+        'التكلفة': product.cost.toFixed(2),
+        'الربح': product.profit.toFixed(2),
+        'النسبة %': product.percentage,
+        'متوسط السعر': product.averagePrice.toFixed(2)
+    }));
+    
+    exportData.push({
+        'الترتيب': '',
+        'المنتج': 'الإجمالي',
+        'عدد الطلبات': stats.totals.totalOrders,
+        'الإيرادات': stats.totals.totalRevenue.toFixed(2),
+        'التكلفة': stats.totals.totalCost.toFixed(2),
+        'الربح': stats.totals.totalProfit.toFixed(2),
+        'النسبة %': '100.00',
+        'متوسط السعر': stats.totals.totalOrders > 0 ? (stats.totals.totalRevenue / stats.totals.totalOrders).toFixed(2) : '0.00'
+    }));
+    
+    if (typeof XLSX !== 'undefined') {
+        const ws = XLSX.utils.json_to_sheet(exportData);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'إحصائيات المنتجات');
+        
+        const dateRange = productStatsDateRange.start && productStatsDateRange.end 
+            ? `_${productStatsDateRange.start.toISOString().split('T')[0]}_${productStatsDateRange.end.toISOString().split('T')[0]}`
+            : '';
+        
+        XLSX.writeFile(wb, `product_statistics${dateRange}.xlsx`);
+        showNotification('تم تصدير الإحصائيات بنجاح', 'success');
+    } else {
+        showNotification('فشل التصدير: المكتبة غير متوفرة', 'danger');
+    }
+}
+
+// تهيئة إحصائيات المنتجات عند تحميل الصفحة
+setTimeout(() => {
+    initProductStatistics();
+    renderProductStatistics();
+}, 1000);
+
+
+// جعل دالة تصدير الشيفتات متاحة عالمياً
+window.exportShiftReport = exportShiftReport;
+
+// تعيين التاريخ الافتراضي لحقل المصروفات عند تحميل الصفحة
+document.addEventListener('DOMContentLoaded', function() {
+    const expenseDateInput = document.getElementById('expense-date-input');
+    if (expenseDateInput && !expenseDateInput.value) {
+        const today = new Date();
+        const yyyy = today.getFullYear();
+        const mm = String(today.getMonth() + 1).padStart(2, '0');
+        const dd = String(today.getDate()).padStart(2, '0');
+        expenseDateInput.value = `${yyyy}-${mm}-${dd}`;
+    }
+});
+
