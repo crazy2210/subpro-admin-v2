@@ -15,6 +15,22 @@ import {
     exportAccountsToExcel,
     getAccountStatusBadge
 } from './automation.js';
+import { initializeEnhancedFeatures } from './enhanced-integration.js';
+import { 
+    calculateShiftStatistics,
+    exportShiftReportToCSV,
+    addExpenseWithDate,
+    replaceDeamagedAccount,
+    getAccountsStatistics,
+    calculateProductStatistics,
+    getOrderDetails,
+    exportToExcel,
+    showToast,
+    showConfirmDialog,
+    SHIFT_DEFINITIONS,
+    EXPENSE_CATEGORIES,
+    ACCOUNT_STATUS
+} from './enhanced-features.js';
 
 const firebaseConfig = {
     apiKey: "AIzaSyAmO9EZt_56rqEdBqxkyJW8ROZDWQ-LDAU",
@@ -2934,6 +2950,14 @@ async function initializeAppAndListeners() {
         // Initialize shift statistics with today's date
         renderShiftStatistics(new Date());
         
+        // Initialize enhanced features with loaded data
+        try {
+            initializeEnhancedFeatures(db, allSales, allExpenses, allAccounts, allProducts);
+            console.log('✅ Enhanced features initialized successfully');
+        } catch (error) {
+            console.error('Error initializing enhanced features:', error);
+        }
+        
         document.getElementById('dashboard-loader').classList.add('hidden');
         document.getElementById('dashboard-content').classList.remove('hidden');
 
@@ -2975,6 +2999,10 @@ async function initializeAppAndListeners() {
             if (shiftDatePicker && shiftDatePicker.selectedDates.length > 0) {
                 renderShiftStatistics(shiftDatePicker.selectedDates[0]);
             }
+            // Update enhanced features with new data
+            try {
+                initializeEnhancedFeatures(db, allSales, allExpenses, allAccounts, allProducts);
+            } catch (e) { console.error('Error updating enhanced features:', e); }
         },
         error => {
             console.error("خطأ في الاستماع للمبيعات:", error);
@@ -2986,7 +3014,11 @@ async function initializeAppAndListeners() {
         query(collection(db, PATH_EXPENSES), orderBy("date", "desc")), 
         snap => { 
             allExpenses = snap.docs.map(d => ({ id: d.id, ...d.data() })); 
-            renderData(); 
+            renderData();
+            // Update enhanced features with new data
+            try {
+                initializeEnhancedFeatures(db, allSales, allExpenses, allAccounts, allProducts);
+            } catch (e) { console.error('Error updating enhanced features:', e); }
         },
         error => {
             console.error("خطأ في الاستماع للمصروفات:", error);
@@ -2998,7 +3030,11 @@ async function initializeAppAndListeners() {
         query(collection(db, PATH_ACCOUNTS), orderBy("purchase_date", "desc")), 
         snap => { 
             allAccounts = snap.docs.map(d => ({ id: d.id, ...d.data() })); 
-            renderData(); 
+            renderData();
+            // Update enhanced features with new data
+            try {
+                initializeEnhancedFeatures(db, allSales, allExpenses, allAccounts, allProducts);
+            } catch (e) { console.error('Error updating enhanced features:', e); }
         },
         error => {
             console.error("خطأ في الاستماع للحسابات:", error);
