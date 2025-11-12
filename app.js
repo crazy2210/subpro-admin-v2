@@ -15,6 +15,7 @@ import {
     exportAccountsToExcel,
     getAccountStatusBadge
 } from './automation.js';
+import { initializeEnhancedFeatures } from './enhanced-integration.js';
 
 const firebaseConfig = {
     apiKey: "AIzaSyAmO9EZt_56rqEdBqxkyJW8ROZDWQ-LDAU",
@@ -2933,6 +2934,14 @@ async function initializeAppAndListeners() {
         
         // Initialize shift statistics with today's date
         renderShiftStatistics(new Date());
+        
+        // Initialize enhanced features
+        try {
+            initializeEnhancedFeatures(db, allSales, allExpenses, allAccounts, allProducts);
+            console.log('✅ Enhanced features initialized successfully');
+        } catch (error) {
+            console.error('⚠️ Error initializing enhanced features:', error);
+        }
         
         document.getElementById('dashboard-loader').classList.add('hidden');
         document.getElementById('dashboard-content').classList.remove('hidden');
