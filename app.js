@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import { getAuth, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-import { getFirestore, doc, onSnapshot, collection, query, addDoc, deleteDoc, serverTimestamp, orderBy, updateDoc, runTransaction, writeBatch, getDocs, getDoc, enableIndexedDbPersistence, enableNetwork, disableNetwork } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { getFirestore, doc, onSnapshot, collection, query, addDoc, deleteDoc, serverTimestamp, orderBy, updateDoc, runTransaction, writeBatch, getDocs, getDoc, enableIndexedDbPersistence, enableNetwork, disableNetwork, Timestamp, deleteField } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { initAuth, hasPermission, PERMISSIONS, logout, applyUIRestrictions, checkSectionAccess, showUnauthorizedAccessMessage } from './auth.js';
 import { initUserManagement } from './users-management.js';
 import { 
@@ -13,7 +13,8 @@ import {
     detectDuplicateAccounts,
     detectInactiveAccounts,
     exportAccountsToExcel,
-    getAccountStatusBadge
+    getAccountStatusBadge,
+    exportProductStatsToExcel
 } from './automation.js';
 
 const firebaseConfig = {
@@ -69,7 +70,8 @@ window.addEventListener('offline', () => {
 let allSales = [], allExpenses = [], allAccounts = [], allProducts = [], allProblems = [], allAdCampaigns = [];
 let dateRangeStart = null, dateRangeEnd = null;
 let expenseDateRangeStart = null, expenseDateRangeEnd = null;
-let flatpickrInstance = null, expenseFlatpickrInstance = null, shiftDatePicker = null, adStartDatePicker = null, adEndDatePicker = null;
+let productStatsDateRangeStart = null, productStatsDateRangeEnd = null;
+let flatpickrInstance = null, expenseFlatpickrInstance = null, addExpenseDatePicker = null, editExpenseDatePicker = null, productStatsDatePicker = null, shiftDatePicker = null, adStartDatePicker = null, adEndDatePicker = null;
 let currentSalesProductFilter = 'all';
 let currentAccountsProductFilter = 'all';
 let currentAccountsStatusFilter = 'all';
@@ -80,6 +82,8 @@ let currentAdProductFilter = 'all';
 let monthlyChart, productProfitChart, expenseTypeChart, salesBySourceChart, traderAnalysisChart, adSpendChart, roasChart;
 let isDarkMode = localStorage.getItem('darkMode') === 'true';
 const PATH_SALES = 'sales', PATH_EXPENSES = 'expenses', PATH_ACCOUNTS = 'accounts', PATH_PRODUCTS = 'products', PATH_PROBLEMS = 'problems', PATH_AD_CAMPAIGNS = 'ad_campaigns';
+let latestProductStats = [];
+let latestProductStatsTotals = { totalOrders: 0, totalRevenue: 0, totalProfit: 0, dateRangeLabel: 'كامل الفترة' };
 
 // Shift definitions (24-hour format)
 const SHIFTS = {
@@ -270,6 +274,50 @@ const calculateDaysRemaining = (expiryDate) => {
     return diffDays;
 };
 
+const toDate = (timestamp) => {
+    if (!timestamp) return null;
+    if (timestamp instanceof Date) return timestamp;
+    if (typeof timestamp.toDate === 'function') {
+        const date = timestamp.toDate();
+        return Number.isNaN(date?.getTime()) ? null : date;
+    }
+    if (typeof timestamp.seconds === 'number') {
+        return new Date(timestamp.seconds * 1000);
+    }
+    if (typeof timestamp === 'string') {
+        const parsed = new Date(timestamp);
+        return Number.isNaN(parsed.getTime()) ? null : parsed;
+    }
+    if (typeof timestamp === 'number') {
+        return new Date(timestamp);
+    }
+    return null;
+};
+
+const mapExpenseDocument = (docSnap) => {
+    const data = docSnap.data();
+    if (!data.date && data.customDate) {
+        data.date = data.customDate;
+    }
+    return { id: docSnap.id, ...data };
+};
+
+const formatNumberValue = (value, decimals = 2) => Number.isFinite(value) ? value.toFixed(decimals) : '0.00';
+const formatCurrencyValue = (value) => `${formatNumberValue(value)} EGP`;
+const formatDateRangeLabel = (start, end) => {
+    if (!start || !end) return 'كامل الفترة';
+    const options = { year: 'numeric', month: 'short', day: 'numeric' };
+    return `${start.toLocaleDateString('ar-EG', options)} - ${end.toLocaleDateString('ar-EG', options)}`;
+};
+const resolveAccountStatus = (account) => {
+    if (!account) return 'available';
+    if (account.status === 'damaged' || account.is_damaged || account.damage_reason) return 'damaged';
+    if (!account.is_active) return 'inactive';
+    if (account.allowed_uses !== Infinity && account.allowed_uses !== undefined && account.current_uses >= account.allowed_uses) return 'full';
+    if (account.current_uses > 0) return 'in_use';
+    return 'available';
+};
+
 // --- DATA RENDERING LOGIC ---
 const renderData = () => {
     let salesToDisplay = [...allSales];
@@ -283,7 +331,7 @@ const renderData = () => {
             return saleDate && saleDate >= dateRangeStart && saleDate <= dateRangeEnd;
         });
          expensesToDisplay = expensesToDisplay.filter(e => {
-            const expenseDate = e.date?.seconds ? new Date(e.date.seconds * 1000) : null;
+            const expenseDate = toDate(e.date) || toDate(e.customDate);
             return expenseDate && expenseDate >= dateRangeStart && expenseDate <= dateRangeEnd;
         });
     }
@@ -301,24 +349,13 @@ const renderData = () => {
         accountsToDisplay = accountsToDisplay.filter(a => a.productName === currentAccountsProductFilter);
     }
     if(currentAccountsStatusFilter !== 'all'){
-        accountsToDisplay = accountsToDisplay.filter(a => {
-            if (currentAccountsStatusFilter === 'available') {
-                return a.is_active && a.current_uses < a.allowed_uses;
-            } else if (currentAccountsStatusFilter === 'unavailable') {
-                return !a.is_active || a.current_uses >= a.allowed_uses;
-            } else if (currentAccountsStatusFilter === 'inactive') {
-                return !a.is_active;
-            } else if (currentAccountsStatusFilter === 'completed') {
-                return a.current_uses >= a.allowed_uses && a.allowed_uses !== Infinity;
-            }
-            return true;
-        });
+        accountsToDisplay = accountsToDisplay.filter(a => resolveAccountStatus(a) === currentAccountsStatusFilter);
     }
     
     // Expenses specific filters
     if(expenseDateRangeStart && expenseDateRangeEnd) {
         expensesToDisplay = expensesToDisplay.filter(e => {
-            const expenseDate = e.date?.seconds ? new Date(e.date.seconds * 1000) : null;
+            const expenseDate = toDate(e.date) || toDate(e.customDate);
             return expenseDate && expenseDate >= expenseDateRangeStart && expenseDate <= expenseDateRangeEnd;
         });
     }
@@ -335,7 +372,7 @@ const renderData = () => {
     updateAccountsTable(accountsToDisplay);
     updateExpensesTable(expensesToDisplay);
     populateProductFilterButtons();
-    updateProductStatistics(); // New detailed statistics per product
+    updateProductStatistics(allSales); // Detailed statistics per product
     
     // Update shift statistics if on reports tab and date picker is initialized
     if (shiftDatePicker && shiftDatePicker.selectedDates.length > 0) {
@@ -837,15 +874,17 @@ const updateAccountsTable = (accountsData) => {
      table.innerHTML = ''; 
      
      // Update account status counters - using accountsData instead of allAccounts to respect filters
-     const availableCount = accountsData.filter(a => a.is_active && a.current_uses < a.allowed_uses).length;
-     const inUseCount = accountsData.filter(a => a.is_active && a.current_uses > 0 && a.current_uses < a.allowed_uses).length;
-     const fullCount = accountsData.filter(a => a.current_uses >= a.allowed_uses && a.allowed_uses !== Infinity).length;
-     const inactiveCount = accountsData.filter(a => !a.is_active).length;
+     const statusCounters = { available: 0, in_use: 0, full: 0, inactive: 0, damaged: 0 };
+     accountsData.forEach(acc => {
+         const status = resolveAccountStatus(acc);
+         statusCounters[status] = (statusCounters[status] || 0) + 1;
+     });
      
-     document.getElementById('accounts-available-count').textContent = availableCount;
-     document.getElementById('accounts-in-use-count').textContent = inUseCount;
-     document.getElementById('accounts-full-count').textContent = fullCount;
-     document.getElementById('accounts-inactive-count').textContent = inactiveCount;
+     document.getElementById('accounts-available-count').textContent = statusCounters.available || 0;
+     document.getElementById('accounts-in-use-count').textContent = statusCounters.in_use || 0;
+     document.getElementById('accounts-full-count').textContent = statusCounters.full || 0;
+     document.getElementById('accounts-inactive-count').textContent = statusCounters.inactive || 0;
+     document.getElementById('accounts-damaged-count').textContent = statusCounters.damaged || 0;
      
      if (accountsData.length === 0) { 
         table.innerHTML = `<tbody><tr><td colspan="9" class="text-center py-10 text-gray-500">لا توجد أكونتات لعرضها.</td></tr></tbody>`; 
@@ -871,11 +910,26 @@ const updateAccountsTable = (accountsData) => {
      tbody.className = 'bg-white divide-y divide-gray-200';
      
      accountsData.forEach(acc => {
-         const row = document.createElement('tr');
-         row.className = 'hover:bg-gray-50 transition-colors';
+           const row = document.createElement('tr');
+           row.className = 'hover:bg-gray-50 transition-colors';
+           const accountStatus = resolveAccountStatus(acc);
+           row.dataset.status = accountStatus;
+           if (accountStatus === 'damaged') {
+               row.classList.add('bg-rose-50');
+               if (acc.damage_reason) {
+                   row.title = `سبب التلف: ${acc.damage_reason}`;
+               }
+           }
          
          // Get status badge using automation module
-         const statusBadge = getAccountStatusBadge(acc);
+           const statusBadge = getAccountStatusBadge(acc);
+           const damageActionHTML = accountStatus === 'damaged'
+               ? `<button data-id="${acc.id}" data-action="restore" class="account-damage-toggle-btn text-emerald-500 hover:text-emerald-700 font-semibold text-sm">
+                        <i class="fas fa-rotate-left"></i> استعادة
+                  </button>`
+               : `<button data-id="${acc.id}" data-action="damage" class="account-damage-toggle-btn text-rose-500 hover:text-rose-700 font-semibold text-sm">
+                        <i class="fas fa-triangle-exclamation"></i> تالف
+                  </button>`;
          const statusHTML = `<span class="px-2 py-1 text-xs font-semibold rounded-full ${statusBadge.bgColor} ${statusBadge.textColor}">
             <i class="fas ${statusBadge.icon} ml-1"></i>${statusBadge.text}
          </span>`;
@@ -918,6 +972,7 @@ const updateAccountsTable = (accountsData) => {
                     <button data-id="${acc.id}" class="delete-account-btn text-red-500 hover:text-red-700 font-semibold text-sm">
                         <i class="fas fa-trash"></i> حذف
                     </button>
+                      ${damageActionHTML}
                 </div>
             </td>`;
          tbody.appendChild(row);
@@ -940,8 +995,9 @@ const updateExpensesTable = (expensesData) => {
           expensesData.forEach(expense => {
               const row = document.createElement('tr');
               const style = typeStyles[expense.type] || typeStyles['مصاريف أخرى'];
-              const expenseDate = expense.customDate || expense.date;
-              row.innerHTML = `<td data-label="التاريخ" class="px-4 py-3 text-gray-600">${new Date(expenseDate?.seconds * 1000).toLocaleDateString('ar-EG')}</td><td data-label="النوع" class="px-4 py-3"><span class="px-3 py-1 inline-flex text-sm leading-5 font-semibold rounded-full ${style.color}"><i class="${style.icon} ml-2"></i>${expense.type}</span></td><td data-label="الفئة" class="px-4 py-3 text-gray-600">${expense.category || '-'}</td><td data-label="الوصف" class="px-4 py-3 text-gray-600">${expense.description || '-'}</td><td data-label="المبلغ" class="px-4 py-3 font-semibold text-gray-900">${(expense.amount || 0).toFixed(2)}</td><td data-label="إجراءات" class="px-4 py-3 text-left"><div class="flex gap-2"><button data-id="${expense.id}" class="edit-expense-btn text-blue-500 hover:text-blue-700 font-semibold">تعديل</button><button data-id="${expense.id}" class="delete-expense-btn text-red-500 hover:text-red-700 font-semibold">حذف</button></div></td>`;
+                const expenseDate = toDate(expense.date) || toDate(expense.customDate);
+                const formattedDate = expenseDate ? expenseDate.toLocaleDateString('ar-EG') : '-';
+                row.innerHTML = `<td data-label="التاريخ" class="px-4 py-3 text-gray-600">${formattedDate}</td><td data-label="النوع" class="px-4 py-3"><span class="px-3 py-1 inline-flex text-sm leading-5 font-semibold rounded-full ${style.color}"><i class="${style.icon} ml-2"></i>${expense.type}</span></td><td data-label="الفئة" class="px-4 py-3 text-gray-600">${expense.category || '-'}</td><td data-label="الوصف" class="px-4 py-3 text-gray-600">${expense.description || '-'}</td><td data-label="المبلغ" class="px-4 py-3 font-semibold text-gray-900">${(expense.amount || 0).toFixed(2)}</td><td data-label="إجراءات" class="px-4 py-3 text-left"><div class="flex gap-2"><button data-id="${expense.id}" class="edit-expense-btn text-blue-500 hover:text-blue-700 font-semibold">تعديل</button><button data-id="${expense.id}" class="delete-expense-btn text-red-500 hover:text-red-700 font-semibold">حذف</button></div></td>`;
               tbody.appendChild(row);
           });
      }
@@ -1022,115 +1078,105 @@ const updateReports = (salesData, expensesData, accountsData) => {
 const renderMonthlyChart=(l,r,e,p)=>{const t=document.getElementById("monthly-performance-chart").getContext("2d");monthlyChart&&monthlyChart.destroy(),monthlyChart=new Chart(t,{type:"line",data:{labels:l,datasets:[{label:"الدخل",data:r,borderColor:"#4f46e5",backgroundColor:"rgba(79, 70, 229, 0.1)",fill:!0,tension:.4},{label:"المصروفات",data:e,borderColor:"#ef4444",backgroundColor:"rgba(239, 68, 68, 0.1)",fill:!0,tension:.4},{label:"الربح",data:p,borderColor:"#22c55e",backgroundColor:"rgba(34, 197, 94, 0.1)",fill:!0,tension:.4}]},options:{scales:{y:{ticks:{color:"#64748b"},grid:{color:"#e2e8f0",borderDash:[5,5]}},x:{ticks:{color:"#64748b"},grid:{display:!1}}}}})};const renderProductProfitChart=(l,d)=>{const t=document.getElementById("profit-by-product-chart").getContext("2d");productProfitChart&&productProfitChart.destroy();const e=d.map(()=>`rgba(${Math.floor(255*Math.random())}, ${Math.floor(255*Math.random())}, ${Math.floor(255*Math.random())}, 0.8)`);productProfitChart=new Chart(t,{type:"bar",data:{labels:l,datasets:[{label:"الربح",data:d,backgroundColor:e,borderRadius:4}]},options:{indexAxis:"y",scales:{x:{ticks:{color:"#64748b"},grid:{color:"#e2e8f0",borderDash:[5,5]}},y:{ticks:{color:"#64748b"},grid:{display:!1}}}}})};const renderExpenseTypeChart=(l,d)=>{const t=document.getElementById("expenses-by-type-chart").getContext("2d");expenseTypeChart&&expenseTypeChart.destroy(),expenseTypeChart=new Chart(t,{type:"doughnut",data:{labels:l,datasets:[{data:d,backgroundColor:["#ef4444","#3b82f6","#f59e0b"],hoverOffset:4}]}})};const renderSalesBySourceChart=(l,d)=>{const t=document.getElementById("sales-by-source-chart").getContext("2d");salesBySourceChart&&salesBySourceChart.destroy();const e=l.map(()=>`rgba(${Math.floor(255*Math.random())}, ${Math.floor(255*Math.random())}, ${Math.floor(255*Math.random())}, 0.8)`);salesBySourceChart=new Chart(t,{type:"doughnut",data:{labels:l,datasets:[{label:"الدخل",data:d,backgroundColor:e,borderColor:"#f8fafc",borderWidth:4,hoverOffset:8}]},options:{plugins:{legend:{position:"bottom"}}}})};const renderTraderAnalysisChart=(l,d)=>{const t=document.getElementById("trader-analysis-chart").getContext("2d");traderAnalysisChart&&traderAnalysisChart.destroy();const e=d.map(()=>`rgba(${Math.floor(255*Math.random())}, ${Math.floor(255*Math.random())}, ${Math.floor(255*Math.random())}, 0.8)`);traderAnalysisChart=new Chart(t,{type:"bar",data:{labels:l,datasets:[{label:"إجمالي التكلفة",data:d,backgroundColor:e,borderRadius:4}]},options:{indexAxis:"y",scales:{x:{ticks:{color:"#64748b"},grid:{color:"#e2e8f0",borderDash:[5,5]}},y:{ticks:{color:"#64748b"},grid:{display:!1}}}}})};
 
 // New function for detailed product statistics
-const updateProductStatistics = () => {
-    const container = document.getElementById('product-statistics-container');
-    if (!container) return;
-    
-    const confirmedSales = allSales.filter(s => s.isConfirmed);
-    const productStats = {};
-    
-    // Calculate statistics per product
-    allProducts.forEach(product => {
-        const productSales = confirmedSales.filter(s => s.productName === product.name);
-        const productExpenses = allExpenses.filter(e => e.type === 'إعلان'); // Consider ad expenses for all
-        
-        // Current month
-        const now = new Date();
-        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-        const currentMonthSales = productSales.filter(s => (s.date?.seconds * 1000) >= startOfMonth.getTime());
-        
-        // Previous month
-        const prevMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-        const startOfPrevMonth = new Date(prevMonthDate.getFullYear(), prevMonthDate.getMonth(), 1);
-        const endOfPrevMonth = new Date(now.getFullYear(), now.getMonth(), 0);
-        endOfPrevMonth.setHours(23, 59, 59, 999);
-        const prevMonthSales = productSales.filter(s => (s.date?.seconds * 1000) >= startOfPrevMonth.getTime() && (s.date?.seconds * 1000) <= endOfPrevMonth.getTime());
-        
-        // Calculate stats
-        const totalSales = productSales.length;
-        const totalRevenue = productSales.reduce((sum, s) => sum + (s.sellingPrice || 0), 0);
-        const totalCost = productSales.reduce((sum, s) => sum + (s.costPrice || 0), 0);
-        const totalProfit = totalRevenue - totalCost;
-        
-        const currentMonthRevenue = currentMonthSales.reduce((sum, s) => sum + (s.sellingPrice || 0), 0);
-        const currentMonthCost = currentMonthSales.reduce((sum, s) => sum + (s.costPrice || 0), 0);
-        const currentMonthProfit = currentMonthRevenue - currentMonthCost;
-        
-        const prevMonthRevenue = prevMonthSales.reduce((sum, s) => sum + (s.sellingPrice || 0), 0);
-        const prevMonthCost = prevMonthSales.reduce((sum, s) => sum + (s.costPrice || 0), 0);
-        const prevMonthProfit = prevMonthRevenue - prevMonthCost;
-        
-        // Growth calculation
-        let growthRate = 0;
-        if (prevMonthProfit !== 0) {
-            growthRate = ((currentMonthProfit - prevMonthProfit) / Math.abs(prevMonthProfit) * 100);
-        } else if (currentMonthProfit > 0) {
-            growthRate = 100;
-        }
-        
-        // Renewals
-        const renewals = productSales.filter(s => s.renewalStatus === 'renewed').length;
-        
-        productStats[product.name] = {
-            totalSales,
-            totalRevenue,
-            totalCost,
-            totalProfit,
-            currentMonthSales: currentMonthSales.length,
-            currentMonthProfit,
-            growthRate,
-            renewals
-        };
+const updateProductStatistics = (salesDataset = allSales) => {
+    const tableBody = document.querySelector('#product-stats-table tbody');
+    const rangeLabelEl = document.getElementById('product-stats-range-label');
+    const totalOrdersEl = document.getElementById('product-stats-total-orders');
+    const totalRevenueEl = document.getElementById('product-stats-total-revenue');
+    const totalProfitEl = document.getElementById('product-stats-total-profit');
+    const topProductNameEl = document.getElementById('product-stats-top-product');
+    const topProductShareEl = document.getElementById('product-stats-top-share');
+
+    if (!tableBody || !rangeLabelEl || !totalOrdersEl || !totalRevenueEl || !totalProfitEl) {
+        return;
+    }
+
+    const filteredSales = salesDataset
+        .filter(sale => sale.isConfirmed && sale.date?.seconds)
+        .filter(sale => {
+            const saleDate = new Date(sale.date.seconds * 1000);
+            if (productStatsDateRangeStart && saleDate < productStatsDateRangeStart) return false;
+            if (productStatsDateRangeEnd && saleDate > productStatsDateRangeEnd) return false;
+            return true;
+        });
+
+    const totalOrders = filteredSales.length;
+    const totalRevenue = filteredSales.reduce((sum, sale) => sum + (sale.sellingPrice || 0), 0);
+    const totalCost = filteredSales.reduce((sum, sale) => sum + (sale.costPrice || 0), 0);
+    const totalProfit = totalRevenue - totalCost;
+
+    const dateRangeLabel = formatDateRangeLabel(productStatsDateRangeStart, productStatsDateRangeEnd);
+    rangeLabelEl.textContent = dateRangeLabel;
+    totalOrdersEl.textContent = totalOrders.toString();
+    totalRevenueEl.textContent = formatCurrencyValue(totalRevenue);
+    totalProfitEl.textContent = formatCurrencyValue(totalProfit);
+
+    if (totalOrders === 0) {
+        tableBody.innerHTML = `<tr><td colspan="8" class="text-center py-6 text-gray-500">لا توجد بيانات منتجات في هذه الفترة.</td></tr>`;
+        latestProductStats = [];
+        latestProductStatsTotals = { totalOrders, totalRevenue, totalProfit, dateRangeLabel };
+        if (topProductNameEl) topProductNameEl.textContent = '—';
+        if (topProductShareEl) topProductShareEl.textContent = 'لا توجد بيانات';
+        return;
+    }
+
+    const productMap = new Map();
+    filteredSales.forEach(sale => {
+        const productName = sale.productName || 'غير محدد';
+        const entry = productMap.get(productName) || { count: 0, revenue: 0, cost: 0 };
+        entry.count += 1;
+        entry.revenue += sale.sellingPrice || 0;
+        entry.cost += sale.costPrice || 0;
+        productMap.set(productName, entry);
     });
-    
-    // Render statistics
-    container.innerHTML = Object.entries(productStats).map(([productName, stats]) => {
-        const growthIcon = stats.growthRate >= 0 ? 'fa-arrow-trend-up text-green-500' : 'fa-arrow-trend-down text-red-500';
-        const growthColor = stats.growthRate >= 0 ? 'text-green-600' : 'text-red-600';
-        
+
+    const productStats = Array.from(productMap.entries()).map(([productName, stats]) => {
+        const profit = stats.revenue - stats.cost;
+        return {
+            productName,
+            orderCount: stats.count,
+            revenue: stats.revenue,
+            cost: stats.cost,
+            profit,
+            revenueShare: totalRevenue > 0 ? (stats.revenue / totalRevenue) * 100 : 0,
+            orderShare: totalOrders > 0 ? (stats.count / totalOrders) * 100 : 0,
+            avgProfitPerOrder: stats.count > 0 ? profit / stats.count : 0
+        };
+    }).sort((a, b) => b.revenue - a.revenue);
+
+    latestProductStats = productStats;
+    latestProductStatsTotals = {
+        totalOrders,
+        totalRevenue,
+        totalProfit,
+        dateRangeLabel
+    };
+
+    if (topProductNameEl && topProductShareEl) {
+        const topProduct = productStats[0];
+        if (topProduct) {
+            topProductNameEl.textContent = topProduct.productName;
+            topProductShareEl.textContent = `${formatNumberValue(topProduct.revenueShare, 1)}% من الإيرادات`;
+        } else {
+            topProductNameEl.textContent = '—';
+            topProductShareEl.textContent = 'لا توجد بيانات';
+        }
+    }
+
+    tableBody.innerHTML = productStats.map((item, index) => {
+        const profitabilityClass = item.profit >= 0 ? 'text-emerald-600' : 'text-red-600';
+        const highlightClass = index === 0 ? 'bg-indigo-50/60' : '';
         return `
-            <div class="main-card p-6">
-                <h3 class="text-2xl font-bold mb-4 text-gray-800">${productName}</h3>
-                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div class="stat-mini">
-                        <i class="fa-solid fa-shopping-cart text-2xl text-blue-500 mb-2"></i>
-                        <p class="text-sm text-gray-500">إجمالي المبيعات</p>
-                        <p class="text-2xl font-bold text-gray-800">${stats.totalSales}</p>
-                    </div>
-                    <div class="stat-mini">
-                        <i class="fa-solid fa-dollar-sign text-2xl text-green-500 mb-2"></i>
-                        <p class="text-sm text-gray-500">إجمالي الدخل</p>
-                        <p class="text-2xl font-bold text-gray-800">${stats.totalRevenue.toFixed(2)}</p>
-                    </div>
-                    <div class="stat-mini">
-                        <i class="fa-solid fa-chart-line text-2xl text-purple-500 mb-2"></i>
-                        <p class="text-sm text-gray-500">إجمالي الربح</p>
-                        <p class="text-2xl font-bold ${stats.totalProfit >= 0 ? 'text-green-600' : 'text-red-600'}">${stats.totalProfit.toFixed(2)}</p>
-                    </div>
-                    <div class="stat-mini">
-                        <i class="fa-solid fa-percent text-2xl text-orange-500 mb-2"></i>
-                        <p class="text-sm text-gray-500">النمو الشهري</p>
-                        <p class="text-xl font-bold ${growthColor}">
-                            <i class="fa-solid ${growthIcon}"></i>
-                            ${stats.growthRate.toFixed(1)}%
-                        </p>
-                    </div>
-                </div>
-                <div class="mt-4 grid grid-cols-2 md:grid-cols-3 gap-4">
-                    <div class="bg-blue-50 p-3 rounded-lg">
-                        <p class="text-xs text-gray-600">مبيعات الشهر الحالي</p>
-                        <p class="text-lg font-bold text-blue-600">${stats.currentMonthSales}</p>
-                    </div>
-                    <div class="bg-green-50 p-3 rounded-lg">
-                        <p class="text-xs text-gray-600">ربح الشهر الحالي</p>
-                        <p class="text-lg font-bold text-green-600">${stats.currentMonthProfit.toFixed(2)}</p>
-                    </div>
-                    <div class="bg-purple-50 p-3 rounded-lg">
-                        <p class="text-xs text-gray-600">التجديدات</p>
-                        <p class="text-lg font-bold text-purple-600">${stats.renewals}</p>
-                    </div>
-                </div>
-            </div>
+            <tr class="${highlightClass}">
+                <td class="px-4 py-3 text-sm text-gray-500">${index + 1}</td>
+                <td class="px-4 py-3 font-semibold text-gray-800">${item.productName}</td>
+                <td class="px-4 py-3 text-sm text-gray-700">${item.orderCount}</td>
+                <td class="px-4 py-3 text-sm text-gray-700">${formatNumberValue(item.orderShare, 1)}%</td>
+                <td class="px-4 py-3 text-sm font-bold text-green-600">${formatCurrencyValue(item.revenue)}</td>
+                <td class="px-4 py-3 text-sm text-gray-700">${formatNumberValue(item.revenueShare, 1)}%</td>
+                <td class="px-4 py-3 text-sm font-semibold ${profitabilityClass}">${formatCurrencyValue(item.profit)}</td>
+                <td class="px-4 py-3 text-sm text-gray-700">${formatCurrencyValue(item.avgProfitPerOrder)}</td>
+            </tr>
         `;
     }).join('');
 };
@@ -1195,7 +1241,53 @@ const populateProductFilterButtons = () => {
 };
 
 const openEditModal=(e)=>{const t=allSales.find(t=>t.id===e);if(!t)return;document.getElementById("edit-sale-id").value=e,document.getElementById("edit-original-accountId").value=t.accountId||"",document.getElementById("edit-contactInfo").value=t.contactInfo||"",document.getElementById("edit-contactMethod").value=t.contactMethod||"",document.getElementById("edit-productName").value=t.productName||"",document.getElementById("edit-accountType").value=t.accountType||"",document.getElementById("edit-subscription").value=t.subscription||"",document.getElementById("edit-sellingPrice").value=t.sellingPrice||0,document.getElementById("edit-costPrice").value=t.costPrice||0;const n=document.getElementById("edit-account-container"),l=document.getElementById("edit-available-accounts-select");t.accountId?(n.classList.remove("hidden"),l.required=!0,populateAvailableAccountsDropdown(l,t.accountId)):(n.classList.add("hidden"),l.required=!1),document.getElementById("edit-cost-price-container").classList.remove("hidden"),document.getElementById("edit-modal-backdrop").classList.remove("hidden"),document.getElementById("edit-modal").classList.remove("hidden")};const closeEditModal=()=>{document.getElementById("edit-modal-backdrop").classList.add("hidden"),document.getElementById("edit-modal").classList.add("hidden")};
-const openEditAccountModal=(e)=>{const t=allAccounts.find(t=>t.id===e);if(!t)return;document.getElementById("edit-account-id").value=e,document.getElementById("edit-account-email").value=t.email||"",document.getElementById("edit-account-password").value=t.password||"",document.getElementById("edit-account-productName").value=t.productName||"",document.getElementById("edit-account-purchase_price").value=t.purchase_price||0,document.getElementById("edit-account-trader_name").value=t.trader_name||"",document.getElementById("edit-account-allowed_uses").value=t.allowed_uses===1/0?"":t.allowed_uses,document.getElementById("edit-account-current_uses").value=t.current_uses||0,document.getElementById("edit-account-is_active").checked=t.is_active,document.getElementById("edit-account-modal-backdrop").classList.remove("hidden"),document.getElementById("edit-account-modal").classList.remove("hidden")};const closeEditAccountModal=()=>{document.getElementById("edit-account-modal-backdrop").classList.add("hidden"),document.getElementById("edit-account-modal").classList.add("hidden")};const openEditExpenseModal=(e)=>{const t=allExpenses.find(t=>t.id===e);if(!t)return;document.getElementById("edit-expense-id").value=e,document.getElementById("edit-expense-type").value=t.type||"",document.getElementById("edit-expense-amount").value=t.amount||0,document.getElementById("edit-expense-description").value=t.description||"",document.getElementById("edit-expense-modal-backdrop").classList.remove("hidden"),document.getElementById("edit-expense-modal").classList.remove("hidden")};const closeEditExpenseModal=()=>{document.getElementById("edit-expense-modal-backdrop").classList.add("hidden"),document.getElementById("edit-expense-modal").classList.add("hidden")};
+const openEditAccountModal = (accountId) => {
+    const account = allAccounts.find(acc => acc.id === accountId);
+    if (!account) return;
+
+    document.getElementById("edit-account-id").value = accountId;
+    document.getElementById("edit-account-email").value = account.email || "";
+    document.getElementById("edit-account-password").value = account.password || "";
+    document.getElementById("edit-account-productName").value = account.productName || "";
+    document.getElementById("edit-account-purchase_price").value = account.purchase_price || 0;
+    document.getElementById("edit-account-trader_name").value = account.trader_name || "";
+    document.getElementById("edit-account-allowed_uses").value = account.allowed_uses === Infinity ? "" : (account.allowed_uses || 0);
+    document.getElementById("edit-account-current_uses").value = account.current_uses || 0;
+    document.getElementById("edit-account-is_active").checked = !!account.is_active;
+
+    document.getElementById("edit-account-modal-backdrop").classList.remove("hidden");
+    document.getElementById("edit-account-modal").classList.remove("hidden");
+};
+
+const closeEditAccountModal = () => {
+    document.getElementById("edit-account-modal-backdrop").classList.add("hidden");
+    document.getElementById("edit-account-modal").classList.add("hidden");
+};
+
+const openEditExpenseModal = (expenseId) => {
+    const expense = allExpenses.find(exp => exp.id === expenseId);
+    if (!expense) return;
+
+    document.getElementById("edit-expense-id").value = expenseId;
+    document.getElementById("edit-expense-type").value = expense.type || "";
+    document.getElementById("edit-expense-amount").value = expense.amount || 0;
+    document.getElementById("edit-expense-description").value = expense.description || "";
+
+    const expenseDate = toDate(expense.date) || toDate(expense.customDate) || new Date();
+    if (editExpenseDatePicker) {
+        editExpenseDatePicker.setDate(expenseDate, true);
+    } else {
+        document.getElementById("edit-expense-date").value = expenseDate.toISOString().slice(0, 10);
+    }
+
+    document.getElementById("edit-expense-modal-backdrop").classList.remove("hidden");
+    document.getElementById("edit-expense-modal").classList.remove("hidden");
+};
+
+const closeEditExpenseModal = () => {
+    document.getElementById("edit-expense-modal-backdrop").classList.add("hidden");
+    document.getElementById("edit-expense-modal").classList.add("hidden");
+};
 
 // --- EXPORT FUNCTION ---
 const exportSalesToExcel = () => {
@@ -1325,7 +1417,28 @@ const setupEventListeners = () => {
     flatpickr("#add-custom-date", { dateFormat: "Y-m-d", locale: "ar" });
     
     // Custom date picker for add expense form
-    flatpickr("#add-expense-custom-date", { dateFormat: "Y-m-d", locale: "ar" });
+    addExpenseDatePicker = flatpickr("#add-expense-date", { dateFormat: "Y-m-d", locale: "ar", defaultDate: new Date() });
+    editExpenseDatePicker = flatpickr("#edit-expense-date", { dateFormat: "Y-m-d", locale: "ar" });
+    productStatsDatePicker = flatpickr("#product-stats-date-range", {
+        mode: "range",
+        dateFormat: "Y-m-d",
+        locale: "ar",
+        onChange: (selectedDates) => {
+            if (selectedDates.length === 0) {
+                productStatsDateRangeStart = null;
+                productStatsDateRangeEnd = null;
+            } else {
+                const start = new Date(selectedDates[0]);
+                start.setHours(0, 0, 0, 0);
+                const endSource = selectedDates.length > 1 ? selectedDates[1] : selectedDates[0];
+                const end = new Date(endSource);
+                end.setHours(23, 59, 59, 999);
+                productStatsDateRangeStart = start;
+                productStatsDateRangeEnd = end;
+            }
+            updateProductStatistics(allSales);
+        }
+    });
     
     document.getElementById('export-sales-btn').addEventListener('click', exportSalesToExcel);
 
@@ -1337,6 +1450,27 @@ const setupEventListeners = () => {
         if(e.target.closest('#accounts-product-filter-container .filter-btn')){
             currentAccountsProductFilter = e.target.closest('.filter-btn').dataset.product;
             renderData();
+        }
+    });
+
+    document.getElementById('clear-product-stats-date-btn')?.addEventListener('click', () => {
+        if (productStatsDatePicker) productStatsDatePicker.clear();
+        productStatsDateRangeStart = null;
+        productStatsDateRangeEnd = null;
+        updateProductStatistics(allSales);
+    });
+
+    document.getElementById('export-product-stats-btn')?.addEventListener('click', async () => {
+        if (!latestProductStats.length) {
+            showNotification('لا توجد بيانات للمنتجات لتصديرها.', 'info');
+            return;
+        }
+        showNotification('جاري إعداد تقرير المنتجات...', 'info');
+        const result = await exportProductStatsToExcel(latestProductStats, latestProductStatsTotals, latestProductStatsTotals.dateRangeLabel);
+        if (result.success) {
+            showNotification(`تم تصدير التقرير: ${result.fileName}`, 'success');
+        } else {
+            showNotification(`خطأ في التصدير: ${result.error}`, 'danger');
         }
     });
     
@@ -1402,7 +1536,14 @@ const setupEventListeners = () => {
         document.getElementById('add-problem-container').classList.toggle('open');
     });
     document.getElementById('toggle-add-account-form').addEventListener('click', () => document.getElementById('add-account-container').classList.toggle('open'));
-    document.getElementById('toggle-add-expense-form').addEventListener('click', () => document.getElementById('add-expense-container').classList.toggle('open'));
+    document.getElementById('toggle-add-expense-form').addEventListener('click', () => {
+        const container = document.getElementById('add-expense-container');
+        const isOpen = !container.classList.contains('open');
+        container.classList.toggle('open');
+        if (isOpen) {
+            addExpenseDatePicker?.setDate(new Date(), true);
+        }
+    });
 
     // FIX: Added event listener for manual sale checkbox
     document.getElementById('manual-sale-checkbox').addEventListener('change', (e) => {
@@ -1484,7 +1625,12 @@ const setupEventListeners = () => {
             const shiftKey = btn.dataset.shift;
             const selectedDate = shiftDatePicker?.selectedDates[0] || new Date();
             const shiftStats = calculateShiftStats(allSales, selectedDate);
-            const shiftData = shiftStats[shiftKey];
+            const shiftData = shiftStats.shifts[shiftKey];
+            
+            if (!shiftData) {
+                showNotification('لا توجد بيانات لهذا الشيفت في التاريخ المحدد.', 'info');
+                return;
+            }
             
             showNotification(`جاري إنشاء تقرير الشيفت...`, 'info');
             const result = await exportShiftReportToExcel(selectedDate, shiftKey, shiftData, allSales);
@@ -1516,9 +1662,10 @@ const setupEventListeners = () => {
         const yesterday = new Date();
         yesterday.setDate(yesterday.getDate() - 1);
         const shiftStats = calculateShiftStats(allSales, yesterday);
-        const shiftData = shiftStats[shiftKey];
+        const shiftData = shiftStats.shifts[shiftKey];
         
         // Auto-export shift report
+        if (!shiftData) return;
         exportShiftReportToExcel(yesterday, shiftKey, shiftData, allSales).then(result => {
             if (result.success) {
                 console.log(`Auto-exported shift report: ${result.fileName}`);
@@ -1686,7 +1833,7 @@ const setupFormSubmissions = () => {
             const commonData = {
                 productName: formData.get('productName'), purchase_price: parseFloat(formData.get('purchase_price')),
                 trader_name: formData.get('trader_name').trim(), allowed_uses: isLifetime ? Infinity : parseInt(allowedUsesValue),
-                current_uses: 0, is_active: true, purchase_date: serverTimestamp()
+                current_uses: 0, is_active: true, purchase_date: serverTimestamp(), status: 'available'
             };
             const batch = writeBatch(db);
             accountsArray.forEach(account => {
@@ -1847,25 +1994,24 @@ const setupFormSubmissions = () => {
         submitBtn.disabled = true; submitBtn.textContent = 'جاري الإضافة...';
         const formData = new FormData(e.target);
         const data = Object.fromEntries(formData.entries());
-        const customDate = data.customDate;
-        const expenseDate = customDate ? new Date(customDate) : null;
+        const dateValue = data.date;
+        const expenseDate = dateValue ? new Date(`${dateValue}T00:00:00`) : null;
+        const hasValidDate = expenseDate && !Number.isNaN(expenseDate.getTime());
         
         try {
             const expenseData = {
                 type: data.type,
                 category: data.category || '',
                 amount: parseFloat(data.amount),
-                description: data.description || '',
-                date: serverTimestamp()
+                description: data.description || ''
             };
             
-            if (expenseDate) {
-                expenseData.customDate = { seconds: Math.floor(expenseDate.getTime() / 1000) };
-            }
+            expenseData.date = hasValidDate ? Timestamp.fromDate(expenseDate) : serverTimestamp();
             
             await addDoc(collection(db, PATH_EXPENSES), expenseData);
             showNotification("تمت إضافة المصروف بنجاح!", "success");
             e.target.reset();
+            addExpenseDatePicker?.setDate(new Date(), true);
             document.getElementById('add-expense-container').classList.remove('open');
         } catch (err) { 
             showNotification("حدث خطأ أثناء إضافة المصروف.", "danger");
@@ -2005,6 +2151,12 @@ const setupFormSubmissions = () => {
                  amount: parseFloat(document.getElementById('edit-expense-amount').value),
                  description: document.getElementById('edit-expense-description').value.trim()
             };
+            const dateValue = document.getElementById('edit-expense-date').value;
+            const expenseDate = dateValue ? new Date(`${dateValue}T00:00:00`) : null;
+            if (expenseDate && !Number.isNaN(expenseDate.getTime())) {
+                dataToUpdate.date = Timestamp.fromDate(expenseDate);
+            }
+            dataToUpdate.customDate = deleteField();
             await updateDoc(doc(db, PATH_EXPENSES, expenseId), dataToUpdate);
             showNotification("تم تعديل المصروف بنجاح!", "info");
             closeEditExpenseModal();
@@ -2120,7 +2272,7 @@ const setupDynamicEventListeners = () => {
     });
     
     document.body.addEventListener('click', async (e) => {
-        const target = e.target.closest('.copyable, .confirm-sale-btn, .edit-sale-btn, .delete-sale-btn, .delete-product-btn, .edit-account-btn, .delete-account-btn, .edit-expense-btn, .delete-expense-btn, .renewal-action-btn');
+        const target = e.target.closest('.copyable, .confirm-sale-btn, .edit-sale-btn, .delete-sale-btn, .delete-product-btn, .edit-account-btn, .delete-account-btn, .account-damage-toggle-btn, .edit-expense-btn, .delete-expense-btn, .renewal-action-btn');
         if (!target) return;
 
         if (target.matches('.copyable')) {
@@ -2223,6 +2375,49 @@ const setupDynamicEventListeners = () => {
                 } catch (err) { showNotification("حدث خطأ.", "danger"); }
             }
         } 
+        else if (target.matches('.account-damage-toggle-btn')) {
+            if (!hasPermission(PERMISSIONS.EDIT_ACCOUNT)) {
+                showNotification('ليس لديك صلاحية لتعديل الأكونتات', 'danger');
+                return;
+            }
+            const accountId = target.dataset.id;
+            const mode = target.dataset.action;
+            const account = allAccounts.find(acc => acc.id === accountId);
+            if (!account) {
+                showNotification('تعذر العثور على الأكونت.', 'danger');
+                return;
+            }
+            if (mode === 'damage') {
+                if (!confirm('هل تريد تعيين هذا الأكونت كتالف؟')) return;
+                const reason = prompt('أدخل سبب التلف (اختياري):', account.damage_reason || '');
+                try {
+                    await updateDoc(doc(db, PATH_ACCOUNTS, accountId), {
+                        status: 'damaged',
+                        is_active: false,
+                        damage_reason: reason || 'تم التعيين كتالف يدويًا',
+                        updatedAt: serverTimestamp()
+                    });
+                    showNotification('تم تعيين الأكونت كتالف.', 'info');
+                } catch (error) {
+                    handleFirebaseError(error, 'تحديث حالة الأكونت');
+                }
+            } else {
+                if (!confirm('هل تريد استعادة هذا الأكونت للحالة المتاحة؟')) return;
+                const allowedUses = account.allowed_uses;
+                const canReactivate = allowedUses === Infinity || allowedUses === undefined || allowedUses === null ? true : account.current_uses < allowedUses;
+                try {
+                    await updateDoc(doc(db, PATH_ACCOUNTS, accountId), {
+                        status: 'available',
+                        is_active: canReactivate,
+                        damage_reason: deleteField(),
+                        updatedAt: serverTimestamp()
+                    });
+                    showNotification('تم استعادة الأكونت للحالة المتاحة.', 'success');
+                } catch (error) {
+                    handleFirebaseError(error, 'تحديث حالة الأكونت');
+                }
+            }
+        } 
         else if(target.matches('.edit-expense-btn')) {
             const expenseId = target.dataset.id;
             openEditExpenseModal(expenseId);
@@ -2304,33 +2499,128 @@ function calculateShiftStats(salesData, selectedDate) {
         return saleDate && saleDate >= startOfDay && saleDate <= endOfDay;
     });
 
-    const shiftData = {
-        NIGHT: { orders: [], revenue: 0, profit: 0, count: 0 },
-        MORNING: { orders: [], revenue: 0, profit: 0, count: 0 },
-        EVENING: { orders: [], revenue: 0, profit: 0, count: 0 }
+    const createShiftAccumulator = () => ({
+        orders: [],
+        revenue: 0,
+        profit: 0,
+        count: 0,
+        accountsSet: new Set(),
+        accountUsageMap: new Map(),
+        productMap: new Map()
+    });
+
+    const shiftAccumulators = {
+        NIGHT: createShiftAccumulator(),
+        MORNING: createShiftAccumulator(),
+        EVENING: createShiftAccumulator()
     };
 
     dayOrders.forEach(sale => {
+        if (!sale?.date?.seconds) return;
         const saleDate = new Date(sale.date.seconds * 1000);
-        const hour = saleDate.getHours();
-        const shift = getShiftForTime(hour);
-        
-        shiftData[shift].orders.push(sale);
-        shiftData[shift].revenue += sale.sellingPrice || 0;
-        shiftData[shift].profit += (sale.sellingPrice || 0) - (sale.costPrice || 0);
-        shiftData[shift].count++;
+        const shiftKey = getShiftForTime(saleDate.getHours());
+        const shiftAccumulator = shiftAccumulators[shiftKey];
+        if (!shiftAccumulator) return;
+
+        const revenue = sale.sellingPrice || 0;
+        const cost = sale.costPrice || 0;
+        const profit = revenue - cost;
+
+        shiftAccumulator.orders.push(sale);
+        shiftAccumulator.revenue += revenue;
+        shiftAccumulator.profit += profit;
+        shiftAccumulator.count += 1;
+
+        const accountIdentifier = sale.accountId || sale.customerEmail || sale.accountEmail || sale.contactInfo || sale.id;
+        if (accountIdentifier) {
+            shiftAccumulator.accountsSet.add(accountIdentifier);
+            const currentUsage = shiftAccumulator.accountUsageMap.get(accountIdentifier) || 0;
+            shiftAccumulator.accountUsageMap.set(accountIdentifier, currentUsage + 1);
+        }
+
+        const productName = sale.productName || 'غير محدد';
+        const productStats = shiftAccumulator.productMap.get(productName) || { count: 0, revenue: 0, profit: 0 };
+        productStats.count += 1;
+        productStats.revenue += revenue;
+        productStats.profit += profit;
+        shiftAccumulator.productMap.set(productName, productStats);
     });
 
-    return shiftData;
+    const shiftSummaries = {};
+    let totalDayOrders = 0;
+    let totalDayRevenue = 0;
+    let totalDayProfit = 0;
+    const totalAccountsSet = new Set();
+
+    Object.entries(SHIFTS).forEach(([key, shiftMeta]) => {
+        const accumulator = shiftAccumulators[key];
+        if (!accumulator) return;
+
+        totalDayOrders += accumulator.count;
+        totalDayRevenue += accumulator.revenue;
+        totalDayProfit += accumulator.profit;
+        accumulator.accountsSet.forEach(acc => totalAccountsSet.add(acc));
+
+        const accountsUsage = Array.from(accumulator.accountUsageMap.entries())
+            .map(([identifier, usage]) => ({ identifier, usage }))
+            .sort((a, b) => b.usage - a.usage);
+
+        const productBreakdown = Array.from(accumulator.productMap.entries())
+            .map(([productName, stats]) => ({
+                productName,
+                count: stats.count,
+                revenue: stats.revenue,
+                profit: stats.profit
+            }))
+            .sort((a, b) => b.count - a.count);
+
+        shiftSummaries[key] = {
+            key,
+            meta: shiftMeta,
+            orders: accumulator.orders,
+            count: accumulator.count,
+            revenue: accumulator.revenue,
+            profit: accumulator.profit,
+            accountsUsedCount: accumulator.accountsSet.size,
+            accountsUsage,
+            productBreakdown,
+            averageOrderValue: accumulator.count > 0 ? accumulator.revenue / accumulator.count : 0,
+            profitPerOrder: accumulator.count > 0 ? accumulator.profit / accumulator.count : 0
+        };
+    });
+
+    Object.values(shiftSummaries).forEach(shift => {
+        shift.orderShare = totalDayOrders > 0 ? (shift.count / totalDayOrders) * 100 : 0;
+        shift.revenueShare = totalDayRevenue > 0 ? (shift.revenue / totalDayRevenue) * 100 : 0;
+        shift.productBreakdown = shift.productBreakdown.map(item => ({
+            ...item,
+            orderShare: shift.count > 0 ? (item.count / shift.count) * 100 : 0,
+            revenueShare: shift.revenue > 0 ? (item.revenue / shift.revenue) * 100 : 0
+        }));
+    });
+
+    return {
+        shifts: shiftSummaries,
+        totals: {
+            orders: totalDayOrders,
+            revenue: totalDayRevenue,
+            profit: totalDayProfit,
+            accountsUsedCount: totalAccountsSet.size,
+            averageOrderValue: totalDayOrders > 0 ? totalDayRevenue / totalDayOrders : 0,
+            profitPerOrder: totalDayOrders > 0 ? totalDayProfit / totalDayOrders : 0
+        },
+        allAccountsUsed: Array.from(totalAccountsSet)
+    };
 }
 
 function renderShiftStatistics(date) {
     const container = document.getElementById('shifts-statistics-container');
-    const shiftStats = calculateShiftStats(allSales, date);
-    
-    const totalDayOrders = Object.values(shiftStats).reduce((sum, shift) => sum + shift.count, 0);
-    const totalDayRevenue = Object.values(shiftStats).reduce((sum, shift) => sum + shift.revenue, 0);
-    const totalDayProfit = Object.values(shiftStats).reduce((sum, shift) => sum + shift.profit, 0);
+    const { shifts, totals } = calculateShiftStats(allSales, date);
+
+    const totalDayOrders = totals.orders;
+    const totalDayRevenue = totals.revenue;
+    const totalDayProfit = totals.profit;
+    const totalAccountsUsed = totals.accountsUsedCount;
 
     let html = `
         <div class="main-card p-6 mb-6">
@@ -2338,18 +2628,22 @@ function renderShiftStatistics(date) {
                 <i class="fa-solid fa-calendar-day ml-2 text-indigo-600"></i>
                 ملخص ${date.toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
             </h3>
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div class="stat-card bg-gradient-to-br from-green-500 to-emerald-600">
                     <p class="font-semibold text-white/90">إجمالي الطلبات</p>
                     <p class="text-4xl font-bold mt-2">${totalDayOrders}</p>
                 </div>
                 <div class="stat-card bg-gradient-to-br from-blue-500 to-indigo-600">
                     <p class="font-semibold text-white/90">إجمالي الإيرادات</p>
-                    <p class="text-4xl font-bold mt-2">${totalDayRevenue.toFixed(2)} EGP</p>
+                    <p class="text-4xl font-bold mt-2">${formatNumberValue(totalDayRevenue)} EGP</p>
                 </div>
                 <div class="stat-card bg-gradient-to-br from-purple-500 to-pink-600">
                     <p class="font-semibold text-white/90">إجمالي الربح</p>
-                    <p class="text-4xl font-bold mt-2">${totalDayProfit.toFixed(2)} EGP</p>
+                    <p class="text-4xl font-bold mt-2">${formatNumberValue(totalDayProfit)} EGP</p>
+                </div>
+                <div class="stat-card bg-gradient-to-br from-sky-500 to-cyan-500">
+                    <p class="font-semibold text-white/90">الأكونتات المستخدمة</p>
+                    <p class="text-4xl font-bold mt-2">${totalAccountsUsed}</p>
                 </div>
             </div>
         </div>
@@ -2358,9 +2652,24 @@ function renderShiftStatistics(date) {
     `;
 
     Object.entries(SHIFTS).forEach(([key, shift]) => {
-        const data = shiftStats[key];
-        const percentage = totalDayOrders > 0 ? ((data.count / totalDayOrders) * 100).toFixed(1) : 0;
-        
+        const data = shifts[key] || {
+            count: 0,
+            revenue: 0,
+            profit: 0,
+            accountsUsedCount: 0,
+            averageOrderValue: 0,
+            profitPerOrder: 0,
+            orderShare: 0,
+            productBreakdown: [],
+            orders: []
+        };
+
+        const percentage = formatNumberValue(data.orderShare || 0, 1);
+        const revenue = formatNumberValue(data.revenue || 0);
+        const profit = formatNumberValue(data.profit || 0);
+        const avgOrderValue = formatNumberValue(data.averageOrderValue || 0);
+        const profitPerOrder = formatNumberValue(data.profitPerOrder || 0);
+
         html += `
             <div class="shift-card">
                 <div class="shift-header">
@@ -2371,46 +2680,97 @@ function renderShiftStatistics(date) {
                     <div class="stat-card bg-gradient-to-br ${shift.color} px-4 py-2">
                         <p class="text-3xl font-bold">${data.count}</p>
                         <p class="text-xs text-white/80">طلبات</p>
+                        <p class="text-[11px] text-white/70 mt-1"><i class="fa-solid fa-user-check ml-1"></i>${data.accountsUsedCount} حساب</p>
                     </div>
                 </div>
                 
                 <div class="shift-stats">
                     <div class="shift-stat-item">
-                        <p class="text-xs text-gray-600 mb-1">النسبة المئوية</p>
+                        <p class="text-xs text-gray-600 mb-1">نسبة الطلبات</p>
                         <p class="text-lg font-bold text-indigo-600">${percentage}%</p>
                     </div>
                     <div class="shift-stat-item">
                         <p class="text-xs text-gray-600 mb-1">الإيرادات</p>
-                        <p class="text-lg font-bold text-green-600">${data.revenue.toFixed(2)}</p>
+                        <p class="text-lg font-bold text-green-600">${revenue} EGP</p>
                     </div>
                     <div class="shift-stat-item">
                         <p class="text-xs text-gray-600 mb-1">الربح</p>
-                        <p class="text-lg font-bold ${data.profit >= 0 ? 'text-emerald-600' : 'text-red-600'}">${data.profit.toFixed(2)}</p>
+                        <p class="text-lg font-bold ${data.profit >= 0 ? 'text-emerald-600' : 'text-red-600'}">${profit} EGP</p>
+                    </div>
+                    <div class="shift-stat-item">
+                        <p class="text-xs text-gray-600 mb-1">متوسط قيمة الطلب</p>
+                        <p class="text-lg font-bold text-blue-600">${avgOrderValue} EGP</p>
                     </div>
                     <div class="shift-stat-item">
                         <p class="text-xs text-gray-600 mb-1">متوسط الربح/طلب</p>
-                        <p class="text-lg font-bold text-purple-600">${data.count > 0 ? (data.profit / data.count).toFixed(2) : '0.00'}</p>
+                        <p class="text-lg font-bold text-purple-600">${profitPerOrder} EGP</p>
+                    </div>
+                    <div class="shift-stat-item">
+                        <p class="text-xs text-gray-600 mb-1">الأكونتات المستخدمة</p>
+                        <p class="text-lg font-bold text-sky-600">${data.accountsUsedCount}</p>
                     </div>
                 </div>
 
+                ${data.productBreakdown.length > 0 ? `
+                    <div class="mt-4 pt-4 border-t border-gray-200">
+                        <h5 class="font-semibold text-gray-700 mb-3">
+                            <i class="fa-solid fa-boxes-stacked ml-1 text-indigo-500"></i>
+                            تفصيل المنتجات
+                        </h5>
+                        <div class="space-y-3">
+                            ${data.productBreakdown.map(product => {
+                                const orderShare = formatNumberValue(product.orderShare || 0, 1);
+                                const revenueShare = formatNumberValue(product.revenueShare || 0, 1);
+                                const rawWidth = product.orderShare || 0;
+                                const barWidth = Math.max(0, Math.min(100, rawWidth));
+                                const productRevenue = formatNumberValue(product.revenue || 0);
+                                const productProfit = formatNumberValue(product.profit || 0);
+                                const profitColor = product.profit >= 0 ? 'text-emerald-600' : 'text-red-600';
+                                return `
+                                    <div class="bg-white/70 rounded-lg p-3 border border-gray-200">
+                                        <div class="flex items-center justify-between">
+                                            <div>
+                                                <p class="font-bold text-gray-800">${product.productName}</p>
+                                                <p class="text-xs text-gray-500 mt-1">طلبات: ${product.count} (${orderShare}%)</p>
+                                            </div>
+                                            <div class="text-right">
+                                                <p class="text-sm font-bold text-green-600">${productRevenue} EGP</p>
+                                                <p class="text-xs ${profitColor}">الربح: ${productProfit} EGP</p>
+                                                <p class="text-[11px] text-gray-500 mt-1">إيرادات: ${revenueShare}%</p>
+                                            </div>
+                                        </div>
+                                        <div class="w-full h-2 bg-indigo-100 rounded-full overflow-hidden mt-3">
+                                            <div class="h-full bg-indigo-500" style="width: ${barWidth}%;"></div>
+                                        </div>
+                                    </div>
+                                `;
+                            }).join('')}
+                        </div>
+                    </div>
+                ` : '<p class="text-center text-gray-500 mt-4">لا توجد بيانات منتجات لهذا الشيفت</p>'}
+
                 ${data.orders.length > 0 ? `
-                    <div class="mt-4 pt-4 border-t border-gray-300">
+                    <div class="mt-6 pt-4 border-t border-gray-300">
                         <h5 class="font-semibold text-gray-700 mb-2">
                             <i class="fa-solid fa-list ml-1"></i>
                             الطلبات (${data.orders.length})
                         </h5>
                         <div class="space-y-2 max-h-64 overflow-y-auto">
                             ${data.orders.map(order => {
-                                const orderTime = new Date(order.date.seconds * 1000);
+                                const orderTime = order.date?.seconds ? new Date(order.date.seconds * 1000) : null;
+                                const profitValue = (order.sellingPrice || 0) - (order.costPrice || 0);
+                                const profitFormatted = formatNumberValue(profitValue);
+                                const profitColor = profitValue >= 0 ? 'text-green-600' : 'text-red-600';
+                                const orderTimeFormatted = orderTime ? orderTime.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }) : '--:--';
                                 return `
-                                    <div class="bg-gray-50 p-2 rounded text-xs">
+                                    <div class="bg-gray-50 p-2 rounded text-xs border border-gray-100">
                                         <div class="flex justify-between items-center">
                                             <span class="font-semibold">${order.contactInfo || 'N/A'}</span>
-                                            <span class="text-gray-500">${orderTime.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}</span>
+                                            <span class="text-gray-500">${orderTimeFormatted}</span>
                                         </div>
                                         <div class="flex justify-between mt-1">
-                                            <span>${order.productName}</span>
-                                            <span class="font-bold text-green-600">${((order.sellingPrice || 0) - (order.costPrice || 0)).toFixed(2)} EGP</span>
+                                            <span class="font-medium text-gray-700">${order.productName || 'غير محدد'}</span>
+                                            <span class="font-bold ${profitColor}">${profitFormatted} EGP</span>
                                         </div>
                                     </div>
                                 `;
@@ -2803,7 +3163,26 @@ async function initializeAppAndListeners() {
         ]);
 
         allSales = salesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-        allExpenses = expensesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        allExpenses = expensesSnap.docs.map(mapExpenseDocument);
+
+        const legacyExpenses = expensesSnap.docs.filter(docSnap => {
+            const data = docSnap.data();
+            return !data.date && data.customDate;
+        });
+
+        if (legacyExpenses.length > 0) {
+            const migrationPromises = legacyExpenses.map((docSnap) => {
+                const legacyDate = toDate(docSnap.data().customDate);
+                if (!legacyDate) return Promise.resolve();
+                return updateDoc(doc(db, PATH_EXPENSES, docSnap.id), {
+                    date: Timestamp.fromDate(legacyDate),
+                    customDate: deleteField()
+                }).catch((migrationError) => {
+                    console.warn(`فشل تحديث تاريخ المصروف ${docSnap.id}:`, migrationError);
+                });
+            });
+            await Promise.all(migrationPromises);
+        }
         allAccounts = accountsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
         allProducts = productsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
         allProblems = problemsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -2869,7 +3248,7 @@ async function initializeAppAndListeners() {
     onSnapshot(
         query(collection(db, PATH_EXPENSES), orderBy("date", "desc")), 
         snap => { 
-            allExpenses = snap.docs.map(d => ({ id: d.id, ...d.data() })); 
+            allExpenses = snap.docs.map(mapExpenseDocument); 
             renderData(); 
         },
         error => {

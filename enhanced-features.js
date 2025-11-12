@@ -1,7 +1,7 @@
 // enhanced-features.js - Enhanced Features for SubPro Dashboard
 // نظام متقدم لإدارة الشيفتات، المصروفات، الأكونتات، والتقارير المفصلة
 
-import { getFirestore, doc, getDoc, updateDoc, addDoc, collection, query, where, getDocs, orderBy, limit, serverTimestamp, runTransaction } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { getFirestore, doc, getDoc, updateDoc, addDoc, collection, query, where, getDocs, orderBy, limit, serverTimestamp, runTransaction, deleteField } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 // ============================================
 // SHIFT MANAGEMENT - نظام إدارة الشيفتات
@@ -327,69 +327,95 @@ export const ACCOUNT_STATUS = {
 export async function replaceDeamagedAccount(db, orderId, damageReason = '', moderatorId = 'guest') {
     try {
         return await runTransaction(db, async (transaction) => {
-            // 1. جلب بيانات الأوردر
             const orderRef = doc(db, 'sales', orderId);
-            const orderDoc = await transaction.get(orderRef);
-            
-            if (!orderDoc.exists()) {
+            const orderSnap = await transaction.get(orderRef);
+
+            if (!orderSnap.exists()) {
                 throw new Error('الأوردر غير موجود');
             }
-            
-            const orderData = orderDoc.data();
-            const currentAccountId = orderData.account_id;
-            const productId = orderData.product;
-            
+
+            const orderData = orderSnap.data();
+            const currentAccountId = orderData.accountId;
+            const productName = orderData.productName;
+            const accountType = orderData.accountType || 'Subscriber';
+
             if (!currentAccountId) {
                 throw new Error('لا يوجد حساب مرتبط بهذا الأوردر');
             }
-            
-            // 2. وسم الأكونت الحالي كـ تالف
+
             const currentAccountRef = doc(db, 'accounts', currentAccountId);
-            const currentAccountDoc = await transaction.get(currentAccountRef);
-            
-            if (!currentAccountDoc.exists()) {
+            const currentAccountSnap = await transaction.get(currentAccountRef);
+
+            if (!currentAccountSnap.exists()) {
                 throw new Error('الحساب الحالي غير موجود');
             }
-            
+
             transaction.update(currentAccountRef, {
                 status: ACCOUNT_STATUS.DAMAGED,
-                damaged_at: serverTimestamp(),
+                is_active: false,
                 damage_reason: damageReason,
+                damaged_at: serverTimestamp(),
                 damaged_by: moderatorId,
-                updatedAt: serverTimestamp()
+                updatedAt: serverTimestamp(),
+                assigned_to_order: deleteField(),
+                assigned_at: deleteField()
             });
-            
-            // 3. البحث عن أكونت بديل متاح
+
             const accountsRef = collection(db, 'accounts');
-            const availableAccountsQuery = query(
+            const candidatesQuery = query(
                 accountsRef,
-                where('product_id', '==', productId),
-                where('status', '==', ACCOUNT_STATUS.AVAILABLE),
-                orderBy('createdAt', 'asc'),
-                limit(1)
+                where('productName', '==', productName),
+                orderBy('purchase_date', 'asc'),
+                limit(20)
             );
-            
-            const availableSnapshot = await getDocs(availableAccountsQuery);
-            
-            if (availableSnapshot.empty) {
+            const candidatesSnapshot = await getDocs(candidatesQuery);
+
+            const replacementDoc = candidatesSnapshot.docs.find(docSnap => {
+                const data = docSnap.data();
+                if (docSnap.id === currentAccountId) return false;
+                if (data.status === ACCOUNT_STATUS.DAMAGED || data.is_damaged || data.damage_reason) return false;
+                if (data.is_active === false) return false;
+                const allowedUses = data.allowed_uses;
+                const currentUses = data.current_uses || 0;
+                if (allowedUses === Infinity || allowedUses === undefined || allowedUses === null) return true;
+                return currentUses < allowedUses;
+            });
+
+            if (!replacementDoc) {
                 throw new Error('لا يوجد حساب بديل متاح لهذا المنتج');
             }
-            
-            const replacementAccountDoc = availableSnapshot.docs[0];
-            const replacementAccountId = replacementAccountDoc.id;
-            
-            // 4. تحديث الأكونت البديل
+
+            const replacementAccountId = replacementDoc.id;
+            const replacementAccountData = replacementDoc.data();
             const replacementAccountRef = doc(db, 'accounts', replacementAccountId);
+
+            let newUses = replacementAccountData.current_uses || 0;
+            let replacementStatus = ACCOUNT_STATUS.USED;
+            let replacementIsActive = true;
+
+            if ((accountType || '').toLowerCase() === 'private') {
+                newUses = 1;
+                replacementIsActive = false;
+            } else {
+                newUses += 1;
+                if (replacementAccountData.allowed_uses !== Infinity && replacementAccountData.allowed_uses !== undefined && newUses >= replacementAccountData.allowed_uses) {
+                    replacementIsActive = false;
+                }
+            }
+
             transaction.update(replacementAccountRef, {
-                status: ACCOUNT_STATUS.USED,
+                current_uses: newUses,
+                status: replacementStatus,
+                is_active: replacementIsActive,
                 assigned_to_order: orderId,
                 assigned_at: serverTimestamp(),
                 updatedAt: serverTimestamp()
             });
-            
-            // 5. تحديث الأوردر
+
             transaction.update(orderRef, {
-                account_id: replacementAccountId,
+                accountId: replacementAccountId,
+                customerEmail: replacementAccountData.email || '',
+                password: replacementAccountData.password || '',
                 damaged_account_id: currentAccountId,
                 replacement_account_id: replacementAccountId,
                 replacement_timestamp: serverTimestamp(),
@@ -397,28 +423,27 @@ export async function replaceDeamagedAccount(db, orderId, damageReason = '', mod
                 replacement_reason: damageReason,
                 updatedAt: serverTimestamp()
             });
-            
-            // 6. إضافة سجل تدقيق (Audit Log)
+
             const auditLogRef = doc(collection(db, 'audit_logs'));
             transaction.set(auditLogRef, {
                 action: 'account_replace_due_to_damage',
                 order_id: orderId,
-                product_id: productId,
+                product_name: productName,
                 old_account_id: currentAccountId,
                 new_account_id: replacementAccountId,
                 moderator_id: moderatorId,
                 note: damageReason,
                 timestamp: serverTimestamp()
             });
-            
+
             return {
                 success: true,
                 oldAccountId: currentAccountId,
                 newAccountId: replacementAccountId,
-                replacementAccountData: replacementAccountDoc.data()
+                replacementAccountData
             };
         });
-        
+
     } catch (error) {
         console.error('خطأ في استبدال الأكونت:', error);
         throw error;
@@ -582,15 +607,26 @@ export async function getOrderDetails(db, orderId) {
             throw new Error('الأوردر غير موجود');
         }
         
-        const orderData = { id: orderId, ...orderDoc.data() };
+        const rawOrder = orderDoc.data();
+        const orderData = {
+            id: orderId,
+            ...rawOrder,
+            date: rawOrder.date?.seconds ? new Date(rawOrder.date.seconds * 1000) : null,
+            replacement_timestamp: rawOrder.replacement_timestamp?.seconds ? new Date(rawOrder.replacement_timestamp.seconds * 1000) : null
+        };
         
         // جلب بيانات الأكونت المرتبط
         let accountData = null;
-        if (orderData.account_id) {
-            const accountRef = doc(db, 'accounts', orderData.account_id);
+        if (orderData.accountId) {
+            const accountRef = doc(db, 'accounts', orderData.accountId);
             const accountDoc = await getDoc(accountRef);
             if (accountDoc.exists()) {
-                accountData = { id: orderData.account_id, ...accountDoc.data() };
+                const data = accountDoc.data();
+                accountData = {
+                    id: orderData.accountId,
+                    ...data,
+                    purchase_date: data.purchase_date?.seconds ? new Date(data.purchase_date.seconds * 1000) : null
+                };
             }
         }
         
@@ -600,7 +636,12 @@ export async function getOrderDetails(db, orderId) {
             const damagedAccountRef = doc(db, 'accounts', orderData.damaged_account_id);
             const damagedAccountDoc = await getDoc(damagedAccountRef);
             if (damagedAccountDoc.exists()) {
-                damagedAccountData = { id: orderData.damaged_account_id, ...damagedAccountDoc.data() };
+                const data = damagedAccountDoc.data();
+                damagedAccountData = {
+                    id: orderData.damaged_account_id,
+                    ...data,
+                    purchase_date: data.purchase_date?.seconds ? new Date(data.purchase_date.seconds * 1000) : null
+                };
             }
         }
         
@@ -613,7 +654,14 @@ export async function getOrderDetails(db, orderId) {
         );
         
         const auditSnapshot = await getDocs(auditQuery);
-        const auditLogs = auditSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        const auditLogs = auditSnapshot.docs.map(doc => {
+            const data = doc.data();
+            return {
+                id: doc.id,
+                ...data,
+                timestamp: data.timestamp?.seconds ? new Date(data.timestamp.seconds * 1000) : null
+            };
+        });
         
         return {
             order: orderData,
@@ -642,13 +690,13 @@ function generateOrderTimeline(orderData, auditLogs) {
             icon: 'fa-plus-circle',
             color: 'text-green-600',
             title: 'تم إنشاء الأوردر',
-            description: `تم إنشاء أوردر جديد للعميل: ${orderData.customer}`,
+            description: `تم إنشاء أوردر جديد للعميل: ${orderData.contactInfo || '-'}`,
             timestamp: orderData.date
         });
     }
     
     // حدث ربط الحساب
-    if (orderData.account_id && !orderData.replacement_timestamp) {
+    if (orderData.accountId && !orderData.replacement_timestamp) {
         timeline.push({
             type: 'account_assigned',
             icon: 'fa-link',
@@ -667,7 +715,7 @@ function generateOrderTimeline(orderData, auditLogs) {
             color: 'text-red-600',
             title: 'تم استبدال الحساب',
             description: `السبب: ${orderData.replacement_reason || 'غير محدد'}`,
-            timestamp: orderData.replacement_timestamp.toDate ? orderData.replacement_timestamp.toDate().toISOString() : orderData.replacement_timestamp
+            timestamp: orderData.replacement_timestamp
         });
     }
     
@@ -679,14 +727,17 @@ function generateOrderTimeline(orderData, auditLogs) {
             color: 'text-gray-600',
             title: getAuditActionTitle(log.action),
             description: log.note || '',
-            timestamp: log.timestamp.toDate ? log.timestamp.toDate().toISOString() : log.timestamp
+            timestamp: log.timestamp
         });
     });
     
     // ترتيب حسب الوقت
     timeline.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
     
-    return timeline;
+    return timeline.map(item => ({
+        ...item,
+        timestamp: item.timestamp instanceof Date ? item.timestamp.toISOString() : item.timestamp
+    }));
 }
 
 /**

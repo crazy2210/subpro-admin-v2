@@ -60,13 +60,18 @@
             background-color: #fee2e2;
             color: #991b1b;
         }
-        .badge-yellow {
+        .badge-yellow,
+        .badge-amber {
             background-color: #fef3c7;
             color: #92400e;
         }
         .badge-blue {
             background-color: #dbeafe;
             color: #1e3a8a;
+        }
+        .badge-gray {
+            background-color: #e2e8f0;
+            color: #1f2937;
         }
         .action-btn {
             display: inline-flex;
@@ -437,18 +442,17 @@
         // Render order details
         function renderOrderDetails(details) {
             const { order, account, damagedAccount, timeline } = details;
+            const orderCode = order.id.substring(0, 8);
             
-            // Order summary
-            document.getElementById('order-subtitle').textContent = `أوردر #${order.id.substring(0, 8)}`;
+            document.getElementById('order-subtitle').textContent = `أوردر #${orderCode}`;
             document.getElementById('order-id').textContent = order.id;
-            document.getElementById('order-customer').textContent = order.customer || '-';
-            document.getElementById('order-product').textContent = order.product || '-';
-            document.getElementById('order-price').textContent = `${order.price || 0} ريال`;
-            document.getElementById('order-date').textContent = new Date(order.date).toLocaleString('ar-EG');
-            document.getElementById('order-payment').textContent = order.payment_method || '-';
+            document.getElementById('order-customer').textContent = order.contactInfo || '-';
+            document.getElementById('order-product').textContent = order.productName || '-';
+            document.getElementById('order-price').textContent = formatCurrency(order.sellingPrice || order.price || 0);
+            document.getElementById('order-date').textContent = order.date ? order.date.toLocaleString('ar-EG') : '-';
+            document.getElementById('order-payment').textContent = order.paymentMethod || '-';
             document.getElementById('order-confirmed').textContent = order.isConfirmed ? 'مؤكد' : 'قيد المراجعة';
             
-            // Status badge
             const statusBadge = document.getElementById('order-status-badge');
             if (order.isConfirmed) {
                 statusBadge.textContent = 'مؤكد';
@@ -458,52 +462,79 @@
                 statusBadge.className = 'badge badge-yellow';
             }
             
-            // Account info
+            const markDamagedBtn = document.getElementById('mark-damaged-btn');
+            
             if (account) {
+                const accountStatus = resolveAccountStatusLocal(account);
                 document.getElementById('account-email').textContent = account.email || '-';
                 document.getElementById('account-email').setAttribute('data-value', account.email || '');
-                document.getElementById('account-password').setAttribute('data-value', account.password || '');
-                document.getElementById('account-status-text').textContent = getAccountStatusText(account.status);
+                const passwordElement = document.getElementById('account-password');
+                passwordElement.textContent = '********';
+                passwordElement.setAttribute('data-value', account.password || '');
+                document.getElementById('account-status-text').textContent = getAccountStatusText(accountStatus);
                 
                 const accountBadge = document.getElementById('account-status-badge');
-                accountBadge.textContent = getAccountStatusText(account.status);
-                accountBadge.className = `badge ${getAccountBadgeClass(account.status)}`;
+                accountBadge.textContent = getAccountStatusText(accountStatus);
+                accountBadge.className = `badge ${getAccountBadgeClass(accountStatus)}`;
+                
+                if (accountStatus === 'damaged') {
+                    markDamagedBtn.disabled = true;
+                    markDamagedBtn.classList.add('opacity-50', 'cursor-not-allowed');
+                } else {
+                    markDamagedBtn.disabled = false;
+                    markDamagedBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+                }
             } else {
                 document.getElementById('account-info').innerHTML = '<p class="text-gray-500 text-center py-4">لا يوجد حساب مرتبط</p>';
-                document.getElementById('mark-damaged-btn').disabled = true;
-                document.getElementById('mark-damaged-btn').classList.add('opacity-50', 'cursor-not-allowed');
+                markDamagedBtn.disabled = true;
+                markDamagedBtn.classList.add('opacity-50', 'cursor-not-allowed');
             }
             
-            // Damaged account info
             if (damagedAccount) {
                 const damagedInfo = document.getElementById('damaged-account-info');
                 damagedInfo.classList.remove('hidden');
                 document.getElementById('damaged-account-email').textContent = damagedAccount.email || '-';
-                document.getElementById('damaged-reason').textContent = `السبب: ${order.replacement_reason || 'غير محدد'}`;
+                document.getElementById('damaged-reason').textContent = `السبب: ${order.replacement_reason || damagedAccount.damage_reason || 'غير محدد'}`;
+            } else {
+                document.getElementById('damaged-account-info').classList.add('hidden');
             }
             
-            // Subscription info
-            if (order.subscription_start) {
-                document.getElementById('sub-start-date').textContent = new Date(order.subscription_start).toLocaleDateString('ar-EG');
+            const startDateEl = document.getElementById('sub-start-date');
+            const endDateEl = document.getElementById('sub-end-date');
+            const daysRemainingEl = document.getElementById('days-remaining');
+            const renewalAlertEl = document.getElementById('renewal-alert');
+            
+            if (order.date) {
+                startDateEl.textContent = order.date.toLocaleDateString('ar-EG');
+            } else {
+                startDateEl.textContent = '-';
             }
-            if (order.subscription_end) {
-                const endDate = new Date(order.subscription_end);
-                document.getElementById('sub-end-date').textContent = endDate.toLocaleDateString('ar-EG');
-                
-                const daysLeft = Math.ceil((endDate - new Date()) / (1000 * 60 * 60 * 24));
-                document.getElementById('days-remaining').textContent = `${daysLeft} يوم`;
-                
-                if (daysLeft <= 2 && daysLeft >= 0) {
-                    document.getElementById('renewal-alert').classList.remove('hidden');
+            
+            const expiryDate = calculateExpiryDate(order.date, order.subscription);
+            if (expiryDate) {
+                endDateEl.textContent = expiryDate.toLocaleDateString('ar-EG');
+                const remaining = calculateDaysRemaining(expiryDate);
+                daysRemainingEl.textContent = remaining !== null ? `${remaining} يوم` : '-';
+                if (remaining !== null && remaining <= 2 && remaining >= 0) {
+                    renewalAlertEl.classList.remove('hidden');
+                } else {
+                    renewalAlertEl.classList.add('hidden');
                 }
+            } else {
+                endDateEl.textContent = 'مدى الحياة';
+                daysRemainingEl.textContent = '-';
+                renewalAlertEl.classList.add('hidden');
             }
             
-            document.getElementById('renewal-status').textContent = order.renewalStatus || 'جديد';
+            const renewalStatusMap = {
+                'pending': 'قيد المتابعة',
+                'alerted': 'تم التنبيه',
+                'renewed': 'تم التجديد',
+                'not-renewed': 'لم يجدد'
+            };
+            document.getElementById('renewal-status').textContent = renewalStatusMap[order.renewalStatus] || order.renewalStatus || 'جديد';
             
-            // Timeline
             renderTimeline(timeline);
-            
-            // Notes
             document.getElementById('order-notes').textContent = order.notes || 'لا توجد ملاحظات';
         }
         
@@ -521,13 +552,10 @@
                 const timelineItem = document.createElement('div');
                 timelineItem.className = 'timeline-item';
                 
-                const date = new Date(item.timestamp);
-                const timeStr = date.toLocaleString('ar-EG', { 
-                    month: 'short', 
-                    day: 'numeric', 
-                    hour: '2-digit', 
-                    minute: '2-digit' 
-                });
+                const date = item.timestamp ? new Date(item.timestamp) : null;
+                const timeStr = date
+                    ? date.toLocaleString('ar-EG', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+                    : '-';
                 
                 timelineItem.innerHTML = `
                     <div class="timeline-dot ${item.color.replace('text-', 'border-')}"></div>
@@ -546,10 +574,32 @@
         }
         
         // Helper functions
+        function formatCurrency(value) {
+            const amount = Number(value) || 0;
+            return `${amount.toFixed(2)} EGP`;
+        }
+        
+        function resolveAccountStatusLocal(account) {
+            if (!account) return 'available';
+            if (account.status === 'damaged' || account.damage_reason) return 'damaged';
+            if (account.is_active === false) {
+                const allowed = account.allowed_uses;
+                if (allowed !== Infinity && allowed !== undefined && (account.current_uses || 0) >= allowed) {
+                    return 'full';
+                }
+                return 'inactive';
+            }
+            if ((account.current_uses || 0) > 0) return 'in_use';
+            return 'available';
+        }
+        
         function getAccountStatusText(status) {
             const statusMap = {
                 'available': 'متاح',
+                'in_use': 'قيد الاستخدام',
                 'used': 'مستخدم',
+                'full': 'مكتمل',
+                'inactive': 'غير نشط',
                 'damaged': 'تالف'
             };
             return statusMap[status] || status;
@@ -558,10 +608,39 @@
         function getAccountBadgeClass(status) {
             const classMap = {
                 'available': 'badge-green',
+                'in_use': 'badge-blue',
                 'used': 'badge-blue',
+                'full': 'badge-amber',
+                'inactive': 'badge-gray',
                 'damaged': 'badge-red'
             };
             return classMap[status] || 'badge-blue';
+        }
+        
+        function calculateExpiryDate(orderDate, subscription) {
+            if (!orderDate || !subscription) return null;
+            if (subscription === 'Lifetime') return null;
+            const start = new Date(orderDate);
+            const expiry = new Date(start);
+            if (subscription.includes('Month')) {
+                const months = parseInt(subscription.match(/\d+/)?.[0] || '1', 10);
+                expiry.setDate(start.getDate() + months * 30);
+            } else if (subscription.includes('Year')) {
+                const years = parseInt(subscription.match(/\d+/)?.[0] || '1', 10);
+                expiry.setDate(start.getDate() + years * 365);
+            } else {
+                return null;
+            }
+            return expiry;
+        }
+        
+        function calculateDaysRemaining(expiryDate) {
+            if (!expiryDate) return null;
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const expiry = new Date(expiryDate);
+            expiry.setHours(0, 0, 0, 0);
+            return Math.ceil((expiry - today) / (1000 * 60 * 60 * 24));
         }
         
         // Event listeners

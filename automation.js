@@ -28,7 +28,9 @@ export async function exportShiftReportToExcel(shiftDate, shiftKey, shiftData, a
             ['إجمالي الطلبات:', shiftData.count],
             ['إجمالي الإيرادات:', `${shiftData.revenue.toFixed(2)} EGP`],
             ['إجمالي الربح:', `${shiftData.profit.toFixed(2)} EGP`],
-            ['متوسط الربح للطلب:', shiftData.count > 0 ? `${(shiftData.profit / shiftData.count).toFixed(2)} EGP` : '0 EGP'],
+            ['متوسط قيمة الطلب:', `${(shiftData.averageOrderValue || 0).toFixed(2)} EGP`],
+            ['متوسط الربح للطلب:', `${(shiftData.profitPerOrder || 0).toFixed(2)} EGP`],
+            ['عدد الأكونتات المستخدمة:', shiftData.accountsUsedCount || 0],
             [''],
             ['تفاصيل الطلبات']
         ];
@@ -54,23 +56,31 @@ export async function exportShiftReportToExcel(shiftDate, shiftKey, shiftData, a
             ]);
         });
 
-        // Get accounts used in this shift
-        const accountsUsedSet = new Set();
-        shiftData.orders.forEach(order => {
-            if (order.accountEmail) {
-                accountsUsedSet.add(order.accountEmail);
-            }
-        });
-
         const accountsData = [
             [''],
             ['الأكونتات المستخدمة في الشيفت'],
-            ['البريد الإلكتروني', 'عدد الاستخدامات']
+            ['المعرف', 'عدد الاستخدامات']
         ];
 
-        Array.from(accountsUsedSet).forEach(email => {
-            const count = shiftData.orders.filter(o => o.accountEmail === email).length;
-            accountsData.push([email, count]);
+        (shiftData.accountsUsage || []).forEach(account => {
+            accountsData.push([account.identifier, account.usage]);
+        });
+
+        const productSheetData = [
+            [''],
+            ['تفصيل المنتجات داخل الشيفت'],
+            ['المنتج', 'عدد الطلبات', 'نسبة الطلبات %', 'الإيرادات', 'نسبة الإيرادات %', 'الربح']
+        ];
+
+        (shiftData.productBreakdown || []).forEach(product => {
+            productSheetData.push([
+                product.productName,
+                product.count,
+                (product.orderShare || 0).toFixed(1),
+                product.revenue.toFixed(2),
+                (product.revenueShare || 0).toFixed(1),
+                product.profit.toFixed(2)
+            ]);
         });
 
         // Create workbook
@@ -80,11 +90,13 @@ export async function exportShiftReportToExcel(shiftDate, shiftKey, shiftData, a
         const ws1 = XLSX.utils.aoa_to_sheet(summaryData);
         const ws2 = XLSX.utils.aoa_to_sheet(ordersData);
         const ws3 = XLSX.utils.aoa_to_sheet(accountsData);
+        const ws4 = XLSX.utils.aoa_to_sheet(productSheetData);
 
         // Add worksheets to workbook
         XLSX.utils.book_append_sheet(wb, ws1, 'ملخص الشيفت');
         XLSX.utils.book_append_sheet(wb, ws2, 'تفاصيل الطلبات');
         XLSX.utils.book_append_sheet(wb, ws3, 'الأكونتات');
+        XLSX.utils.book_append_sheet(wb, ws4, 'المنتجات');
 
         // Download file
         const fileName = `تقرير_شيفت_${shift.name}_${dateStr.replace(/\//g, '-')}.xlsx`;
@@ -98,7 +110,7 @@ export async function exportShiftReportToExcel(shiftDate, shiftKey, shiftData, a
 }
 
 // Export daily summary report (all shifts)
-export async function exportDailySummaryToExcel(date, allShiftsData, allSalesData, allExpensesData) {
+export async function exportDailySummaryToExcel(date, shiftStatsResult, allSalesData, allExpensesData) {
     try {
         const XLSX = window.XLSX;
         if (!XLSX) {
@@ -107,10 +119,34 @@ export async function exportDailySummaryToExcel(date, allShiftsData, allSalesDat
 
         const dateStr = date.toLocaleDateString('ar-EG');
         
-        // Calculate daily totals
-        const totalOrders = Object.values(allShiftsData).reduce((sum, shift) => sum + shift.count, 0);
-        const totalRevenue = Object.values(allShiftsData).reduce((sum, shift) => sum + shift.revenue, 0);
-        const totalProfit = Object.values(allShiftsData).reduce((sum, shift) => sum + shift.profit, 0);
+        const shiftsData = shiftStatsResult?.shifts || shiftStatsResult || {};
+        const totalsOverride = shiftStatsResult?.totals || null;
+        const shiftEntries = Object.entries(shiftsData);
+
+        let derivedOrders = 0;
+        let derivedRevenue = 0;
+        let derivedProfit = 0;
+        const accountsSet = new Set();
+        
+        shiftEntries.forEach(([, shift]) => {
+            derivedOrders += shift.count || 0;
+            derivedRevenue += shift.revenue || 0;
+            derivedProfit += shift.profit || 0;
+            
+            if (Array.isArray(shift.accountsUsage) && shift.accountsUsage.length > 0) {
+                shift.accountsUsage.forEach(acc => accountsSet.add(acc.identifier));
+            } else if (Array.isArray(shift.orders)) {
+                shift.orders.forEach(order => {
+                    const identifier = order.accountId || order.customerEmail || order.accountEmail || order.contactInfo;
+                    if (identifier) accountsSet.add(identifier);
+                });
+            }
+        });
+
+        const totalOrders = totalsOverride?.orders ?? derivedOrders;
+        const totalRevenue = totalsOverride?.revenue ?? derivedRevenue;
+        const totalProfit = totalsOverride?.profit ?? derivedProfit;
+        const totalAccountsUsed = totalsOverride?.accountsUsedCount ?? accountsSet.size;
         
         // Daily expenses
         const startOfDay = new Date(date);
@@ -137,12 +173,13 @@ export async function exportDailySummaryToExcel(date, allShiftsData, allSalesDat
             ['إجمالي الربح من المبيعات:', `${totalProfit.toFixed(2)} EGP`],
             ['إجمالي المصروفات:', `${totalExpenses.toFixed(2)} EGP`],
             ['صافي الربح:', `${netProfit.toFixed(2)} EGP`],
+            ['عدد الأكونتات المستخدمة:', totalAccountsUsed],
             [''],
             ['أداء الشيفتات']
         ];
 
         const shiftsComparisonData = [
-            ['الشيفت', 'الوقت', 'الطلبات', 'الإيرادات', 'الربح', 'النسبة %']
+            ['الشيفت', 'الوقت', 'الطلبات', 'الإيرادات', 'الربح', 'النسبة %', 'الأكونتات']
         ];
 
         const shiftNames = {
@@ -151,15 +188,24 @@ export async function exportDailySummaryToExcel(date, allShiftsData, allSalesDat
             EVENING: { name: 'العصر', time: '4م - 12ص' }
         };
 
-        Object.entries(allShiftsData).forEach(([key, data]) => {
+        shiftEntries.forEach(([key, data]) => {
             const percentage = totalOrders > 0 ? ((data.count / totalOrders) * 100).toFixed(1) : 0;
+            const accountCount = data.accountsUsedCount ?? (Array.isArray(data.accountsUsage) ? data.accountsUsage.length : 0);
+            const label = data.meta?.name || shiftNames[key]?.name || key;
+            const timeWindow = data.meta
+                ? `${String(data.meta.start ?? 0).padStart(2, '0')}:00 - ${String(((data.meta.end ?? 0) >= 24 ? 0 : (data.meta.end ?? 0))).padStart(2, '0')}:00`
+                : shiftNames[key]?.time || '';
+            const revenue = (data.revenue || 0).toFixed(2);
+            const profit = (data.profit || 0).toFixed(2);
+
             shiftsComparisonData.push([
-                shiftNames[key].name,
-                shiftNames[key].time,
-                data.count,
-                data.revenue.toFixed(2),
-                data.profit.toFixed(2),
-                `${percentage}%`
+                label,
+                timeWindow,
+                data.count || 0,
+                revenue,
+                profit,
+                `${percentage}%`,
+                accountCount
             ]);
         });
 
@@ -324,7 +370,8 @@ export function generateShiftReportText(shiftDate, shiftKey, shiftData) {
         day: 'numeric' 
     });
 
-    const avgProfitPerOrder = shiftData.count > 0 ? (shiftData.profit / shiftData.count).toFixed(2) : '0.00';
+    const avgProfitPerOrder = shiftData.profitPerOrder ? shiftData.profitPerOrder.toFixed(2) : (shiftData.count > 0 ? (shiftData.profit / shiftData.count).toFixed(2) : '0.00');
+    const avgOrderValue = shiftData.averageOrderValue ? shiftData.averageOrderValue.toFixed(2) : (shiftData.count > 0 ? (shiftData.revenue / shiftData.count).toFixed(2) : '0.00');
 
     return `
 📊 تقرير ${shiftNames[shiftKey]}
@@ -334,7 +381,9 @@ export function generateShiftReportText(shiftDate, shiftKey, shiftData) {
 • إجمالي الطلبات: ${shiftData.count}
 • إجمالي الإيرادات: ${shiftData.revenue.toFixed(2)} EGP
 • إجمالي الربح: ${shiftData.profit.toFixed(2)} EGP
+• متوسط قيمة الطلب: ${avgOrderValue} EGP
 • متوسط الربح للطلب: ${avgProfitPerOrder} EGP
+• الأكونتات المستخدمة: ${shiftData.accountsUsedCount || 0}
 
 ✅ تم إنشاء هذا التقرير تلقائياً بواسطة نظام SubPro Dashboard V3
     `.trim();
@@ -529,6 +578,9 @@ export async function exportAccountsToExcel(allAccountsData, productFilter = 'al
 
 // Get account status badge info
 export function getAccountStatusBadge(account) {
+    if (account.status === 'damaged' || account.is_damaged) {
+        return { text: 'تالف', bgColor: 'bg-rose-100', textColor: 'text-rose-700', icon: 'fa-circle-xmark' };
+    }
     if (!account.is_active) {
         return { text: 'غير نشط', bgColor: 'bg-gray-100', textColor: 'text-gray-800', icon: 'fa-ban' };
     }
@@ -546,4 +598,56 @@ export function getAccountStatusBadge(account) {
     }
     
     return { text: 'متاح', bgColor: 'bg-green-100', textColor: 'text-green-800', icon: 'fa-check' };
+}
+
+// Export product statistics to Excel
+export async function exportProductStatsToExcel(productStats, totals, dateRangeLabel = 'كامل الفترة') {
+    try {
+        const XLSX = window.XLSX;
+        if (!XLSX) {
+            throw new Error('XLSX library not loaded');
+        }
+
+        const totalOrders = totals?.totalOrders ?? 0;
+        const totalRevenue = totals?.totalRevenue ?? 0;
+        const totalProfit = totals?.totalProfit ?? 0;
+
+        const summaryData = [
+            ['تقرير إحصائيات المنتجات - SubPro Dashboard'],
+            ['الفترة:', dateRangeLabel || 'كامل الفترة'],
+            ['إجمالي الطلبات:', totalOrders],
+            ['إجمالي الإيرادات:', `${totalRevenue.toFixed(2)} EGP`],
+            ['إجمالي الربح:', `${totalProfit.toFixed(2)} EGP`],
+            ['']
+        ];
+
+        const tableData = [
+            ['#', 'المنتج', 'عدد الطلبات', 'نسبة الطلبات %', 'الإيرادات', 'نسبة الإيرادات %', 'الربح', 'متوسط الربح/طلب']
+        ];
+
+        productStats.forEach((item, index) => {
+            tableData.push([
+                index + 1,
+                item.productName,
+                item.orderCount,
+                (item.orderShare || 0).toFixed(1),
+                (item.revenue || 0).toFixed(2),
+                (item.revenueShare || 0).toFixed(1),
+                (item.profit || 0).toFixed(2),
+                (item.avgProfitPerOrder || 0).toFixed(2)
+            ]);
+        });
+
+        const wb = XLSX.utils.book_new();
+        const sheet = XLSX.utils.aoa_to_sheet([...summaryData, ...tableData]);
+        XLSX.utils.book_append_sheet(wb, sheet, 'إحصائيات المنتجات');
+
+        const fileName = `تقرير_إحصائيات_المنتجات_${new Date().toISOString().split('T')[0]}.xlsx`;
+        XLSX.writeFile(wb, fileName);
+
+        return { success: true, fileName };
+    } catch (error) {
+        console.error('Error exporting product stats:', error);
+        return { success: false, error: error.message };
+    }
 }
