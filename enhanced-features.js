@@ -832,3 +832,188 @@ export default {
     showToast,
     showConfirmDialog
 };
+
+
+// ============================================
+// AD EXPENSES & ORDER COST CALCULATION
+// حساب تكلفة الأوردر من مصروفات الإعلانات
+// ============================================
+
+/**
+ * حساب تكلفة الأوردر الواحد ليوم معين
+ * @param {object} db - Firestore database instance
+ * @param {Date} targetDate - التاريخ المستهدف
+ * @returns {Promise<object>} إحصائيات التكلفة
+ */
+export async function calculateOrderCostForDate(db, targetDate) {
+    try {
+        const dayStart = new Date(targetDate);
+        dayStart.setHours(0, 0, 0, 0);
+        
+        const dayEnd = new Date(targetDate);
+        dayEnd.setHours(23, 59, 59, 999);
+        
+        // جلب مصروفات الإعلانات لهذا اليوم
+        const expensesRef = collection(db, 'expenses');
+        const expensesQuery = query(
+            expensesRef,
+            where('type', '==', 'إعلانات'),
+            where('expense_date', '>=', dayStart),
+            where('expense_date', '<=', dayEnd)
+        );
+        
+        const expensesSnapshot = await getDocs(expensesQuery);
+        let totalAdExpenses = 0;
+        
+        expensesSnapshot.forEach(doc => {
+            const data = doc.data();
+            totalAdExpenses += parseFloat(data.amount) || 0;
+        });
+        
+        // جلب عدد الأوردرات لهذا اليوم
+        const salesRef = collection(db, 'sales');
+        const salesQuery = query(
+            salesRef,
+            where('created_at', '>=', dayStart),
+            where('created_at', '<=', dayEnd)
+        );
+        
+        const salesSnapshot = await getDocs(salesQuery);
+        const orderCount = salesSnapshot.size;
+        
+        // حساب تكلفة الأوردر الواحد
+        const costPerOrder = orderCount > 0 ? totalAdExpenses / orderCount : 0;
+        
+        return {
+            date: targetDate,
+            totalAdExpenses,
+            orderCount,
+            costPerOrder,
+            formattedCost: costPerOrder.toFixed(2)
+        };
+    } catch (error) {
+        console.error('خطأ في حساب تكلفة الأوردر:', error);
+        throw error;
+    }
+}
+
+/**
+ * حساب تكلفة الأوردر لنطاق تاريخي
+ * @param {object} db - Firestore database instance
+ * @param {Date} startDate - تاريخ البداية
+ * @param {Date} endDate - تاريخ النهاية
+ * @returns {Promise<Array>} قائمة التكاليف اليومية
+ */
+export async function calculateOrderCostForDateRange(db, startDate, endDate) {
+    try {
+        const results = [];
+        const currentDate = new Date(startDate);
+        
+        while (currentDate <= endDate) {
+            const dayCost = await calculateOrderCostForDate(db, new Date(currentDate));
+            results.push(dayCost);
+            currentDate.setDate(currentDate.getDate() + 1);
+        }
+        
+        return results;
+    } catch (error) {
+        console.error('خطأ في حساب تكلفة الأوردر للنطاق:', error);
+        throw error;
+    }
+}
+
+/**
+ * إضافة مصروف إعلان مع تاريخ محدد
+ * @param {object} db - Firestore database instance
+ * @param {object} expenseData - بيانات المصروف
+ * @returns {Promise<string>} معرف المصروف
+ */
+export async function addAdExpenseWithDate(db, expenseData) {
+    try {
+        const expense = {
+            type: 'إعلانات',
+            amount: parseFloat(expenseData.amount),
+            description: expenseData.description || '',
+            platform: expenseData.platform || '',
+            campaign_name: expenseData.campaign_name || '',
+            expense_date: expenseData.expense_date || new Date(),
+            created_at: serverTimestamp()
+        };
+        
+        const docRef = await addDoc(collection(db, 'expenses'), expense);
+        return docRef.id;
+    } catch (error) {
+        console.error('خطأ في إضافة مصروف الإعلان:', error);
+        throw error;
+    }
+}
+
+/**
+ * تحديث تاريخ مصروف إعلان
+ * @param {object} db - Firestore database instance
+ * @param {string} expenseId - معرف المصروف
+ * @param {Date} newDate - التاريخ الجديد
+ * @returns {Promise<void>}
+ */
+export async function updateAdExpenseDate(db, expenseId, newDate) {
+    try {
+        await updateDoc(doc(db, 'expenses', expenseId), {
+            expense_date: newDate
+        });
+    } catch (error) {
+        console.error('خطأ في تحديث تاريخ المصروف:', error);
+        throw error;
+    }
+}
+
+/**
+ * الحصول على إحصائيات شاملة للإعلانات والتكاليف
+ * @param {object} db - Firestore database instance
+ * @param {Date} startDate - تاريخ البداية
+ * @param {Date} endDate - تاريخ النهاية
+ * @returns {Promise<object>} إحصائيات شاملة
+ */
+export async function getAdExpensesStatistics(db, startDate, endDate) {
+    try {
+        const expensesRef = collection(db, 'expenses');
+        const expensesQuery = query(
+            expensesRef,
+            where('type', '==', 'إعلانات'),
+            where('expense_date', '>=', startDate),
+            where('expense_date', '<=', endDate)
+        );
+        
+        const expensesSnapshot = await getDocs(expensesQuery);
+        
+        let totalExpenses = 0;
+        const byPlatform = {};
+        const byCampaign = {};
+        const byDate = {};
+        
+        expensesSnapshot.forEach(doc => {
+            const data = doc.data();
+            const amount = parseFloat(data.amount) || 0;
+            const platform = data.platform || 'غير محدد';
+            const campaign = data.campaign_name || 'غير محدد';
+            const date = data.expense_date?.toDate?.() || new Date(data.expense_date);
+            const dateKey = date.toISOString().split('T')[0];
+            
+            totalExpenses += amount;
+            
+            byPlatform[platform] = (byPlatform[platform] || 0) + amount;
+            byCampaign[campaign] = (byCampaign[campaign] || 0) + amount;
+            byDate[dateKey] = (byDate[dateKey] || 0) + amount;
+        });
+        
+        return {
+            totalExpenses,
+            byPlatform,
+            byCampaign,
+            byDate,
+            expenseCount: expensesSnapshot.size
+        };
+    } catch (error) {
+        console.error('خطأ في جلب إحصائيات الإعلانات:', error);
+        throw error;
+    }
+}

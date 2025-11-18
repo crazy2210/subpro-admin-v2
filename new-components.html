@@ -1,0 +1,442 @@
+<!-- 
+    مكونات واجهة المستخدم الجديدة
+    SubPro Dashboard - New UI Components
+    
+    هذا الملف يحتوي على:
+    - نموذج إضافة أوردر مع زر التجديد
+    - واجهة الأوردرات المحسنة
+    - واجهة الأكونتات المحسنة
+    - تاب إحصائيات الشيفتات
+    - نظام التنبيهات
+-->
+
+<!-- ============================================ -->
+<!-- نموذج البحث عن اشتراك للتجديد -->
+<!-- ============================================ -->
+<div id="renewalSearchModal" class="modal hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden">
+        <!-- Header -->
+        <div class="bg-gradient-to-r from-blue-500 to-cyan-500 p-6 text-white">
+            <div class="flex justify-between items-center">
+                <div>
+                    <h3 class="text-2xl font-bold">🔄 البحث عن اشتراك للتجديد</h3>
+                    <p class="text-sm opacity-90 mt-1">ابحث عن العميل أو الاشتراك القديم لإنشاء تجديد</p>
+                </div>
+                <button onclick="closeRenewalSearchModal()" class="text-white hover:bg-white hover:bg-opacity-20 rounded-full p-2 transition">
+                    <i class="fas fa-times text-xl"></i>
+                </button>
+            </div>
+        </div>
+        
+        <!-- Search Form -->
+        <div class="p-6 border-b dark:border-gray-700">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="col-span-2">
+                    <label class="block text-sm font-medium mb-2 dark:text-gray-300">كلمة البحث</label>
+                    <input type="text" id="renewalSearchTerm" 
+                           placeholder="ابحث بالاسم، رقم الهاتف، الإيميل، أو رقم الأوردر..."
+                           class="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-2 dark:text-gray-300">نوع البحث</label>
+                    <select id="renewalSearchType" class="w-full px-4 py-3 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+                        <option value="all">الكل</option>
+                        <option value="name">الاسم</option>
+                        <option value="phone">رقم الهاتف</option>
+                        <option value="email">البريد الإلكتروني</option>
+                        <option value="product">المنتج</option>
+                    </select>
+                </div>
+                <div class="flex items-end">
+                    <button onclick="searchForRenewal()" class="w-full bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-lg transition">
+                        <i class="fas fa-search ml-2"></i>بحث
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Results -->
+        <div class="p-6 overflow-y-auto max-h-96">
+            <div id="renewalSearchResults" class="space-y-3">
+                <div class="text-center text-gray-500 dark:text-gray-400 py-8">
+                    <i class="fas fa-search text-4xl mb-3 opacity-50"></i>
+                    <p>ابدأ البحث لعرض النتائج</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ============================================ -->
+<!-- نموذج إضافة/تعديل أوردر محسّن -->
+<!-- ============================================ -->
+<div id="enhancedOrderModal" class="modal hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-5xl max-h-[90vh] overflow-y-auto">
+        <!-- Header -->
+        <div class="bg-gradient-to-r from-green-500 to-teal-500 p-6 text-white sticky top-0 z-10">
+            <div class="flex justify-between items-center">
+                <div>
+                    <h3 class="text-2xl font-bold" id="orderModalTitle">📝 إضافة أوردر جديد</h3>
+                    <p class="text-sm opacity-90 mt-1">املأ البيانات بدقة</p>
+                </div>
+                <div class="flex gap-2">
+                    <button onclick="openRenewalSearchModal()" class="bg-blue-500 hover:bg-blue-600 px-4 py-2 rounded-lg transition">
+                        <i class="fas fa-sync-alt ml-2"></i>تجديد
+                    </button>
+                    <button onclick="closeEnhancedOrderModal()" class="text-white hover:bg-white hover:bg-opacity-20 rounded-full p-2 transition">
+                        <i class="fas fa-times text-xl"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Form -->
+        <form id="enhancedOrderForm" class="p-6 space-y-6">
+            <!-- بيانات العميل -->
+            <div class="bg-blue-50 dark:bg-gray-700 p-4 rounded-lg">
+                <h4 class="font-bold text-lg mb-4 text-blue-700 dark:text-blue-300">
+                    <i class="fas fa-user ml-2"></i>بيانات العميل
+                </h4>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium mb-2 dark:text-gray-300">اسم العميل *</label>
+                        <input type="text" name="customer_name" required
+                               class="w-full px-4 py-2 border rounded-lg dark:bg-gray-600 dark:border-gray-500 dark:text-white">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-2 dark:text-gray-300">رقم الهاتف</label>
+                        <input type="tel" name="customer_phone"
+                               class="w-full px-4 py-2 border rounded-lg dark:bg-gray-600 dark:border-gray-500 dark:text-white">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-2 dark:text-gray-300">البريد الإلكتروني</label>
+                        <input type="email" name="customer_email"
+                               class="w-full px-4 py-2 border rounded-lg dark:bg-gray-600 dark:border-gray-500 dark:text-white">
+                    </div>
+                </div>
+            </div>
+            
+            <!-- بيانات المنتج والسعر -->
+            <div class="bg-green-50 dark:bg-gray-700 p-4 rounded-lg">
+                <h4 class="font-bold text-lg mb-4 text-green-700 dark:text-green-300">
+                    <i class="fas fa-box ml-2"></i>بيانات المنتج
+                </h4>
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium mb-2 dark:text-gray-300">المنتج *</label>
+                        <select name="product" required
+                                class="w-full px-4 py-2 border rounded-lg dark:bg-gray-600 dark:border-gray-500 dark:text-white">
+                            <option value="">اختر المنتج</option>
+                            <!-- سيتم ملؤها ديناميكياً -->
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-2 dark:text-gray-300">السعر *</label>
+                        <input type="number" name="price" required min="0" step="0.01"
+                               class="w-full px-4 py-2 border rounded-lg dark:bg-gray-600 dark:border-gray-500 dark:text-white">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-2 dark:text-gray-300">التكلفة</label>
+                        <input type="number" name="cost" min="0" step="0.01"
+                               class="w-full px-4 py-2 border rounded-lg dark:bg-gray-600 dark:border-gray-500 dark:text-white">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-2 dark:text-gray-300">الربح</label>
+                        <input type="number" name="profit" readonly
+                               class="w-full px-4 py-2 border rounded-lg bg-gray-100 dark:bg-gray-600 dark:border-gray-500 dark:text-white">
+                    </div>
+                </div>
+            </div>
+            
+            <!-- بيانات الاشتراك -->
+            <div class="bg-purple-50 dark:bg-gray-700 p-4 rounded-lg">
+                <h4 class="font-bold text-lg mb-4 text-purple-700 dark:text-purple-300">
+                    <i class="fas fa-calendar-alt ml-2"></i>بيانات الاشتراك
+                </h4>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium mb-2 dark:text-gray-300">مدة الاشتراك (بالأشهر)</label>
+                        <input type="number" name="subscription_duration_months" min="1" value="1"
+                               class="w-full px-4 py-2 border rounded-lg dark:bg-gray-600 dark:border-gray-500 dark:text-white">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-2 dark:text-gray-300">تكرار تغيير الحساب</label>
+                        <select name="account_change_frequency"
+                                class="w-full px-4 py-2 border rounded-lg dark:bg-gray-600 dark:border-gray-500 dark:text-white">
+                            <option value="none">لا يوجد</option>
+                            <option value="monthly">شهرياً</option>
+                            <option value="quarterly">كل 3 أشهر</option>
+                            <option value="semi_annual">كل 6 أشهر</option>
+                        </select>
+                    </div>
+                    <div class="flex items-center">
+                        <label class="flex items-center cursor-pointer">
+                            <input type="checkbox" name="auto_renew" class="ml-2 w-5 h-5">
+                            <span class="text-sm font-medium dark:text-gray-300">تجديد تلقائي</span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- بيانات الدفع -->
+            <div class="bg-yellow-50 dark:bg-gray-700 p-4 rounded-lg">
+                <h4 class="font-bold text-lg mb-4 text-yellow-700 dark:text-yellow-300">
+                    <i class="fas fa-money-bill-wave ml-2"></i>بيانات الدفع
+                </h4>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium mb-2 dark:text-gray-300">حالة الدفع</label>
+                        <select name="payment_status"
+                                class="w-full px-4 py-2 border rounded-lg dark:bg-gray-600 dark:border-gray-500 dark:text-white">
+                            <option value="unpaid">غير مدفوع</option>
+                            <option value="partial">مدفوع جزئياً</option>
+                            <option value="paid">مدفوع بالكامل</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-2 dark:text-gray-300">المبلغ المدفوع</label>
+                        <input type="number" name="amount_paid" min="0" step="0.01" value="0"
+                               class="w-full px-4 py-2 border rounded-lg dark:bg-gray-600 dark:border-gray-500 dark:text-white">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-2 dark:text-gray-300">المبلغ المتبقي</label>
+                        <input type="number" name="amount_remaining" readonly
+                               class="w-full px-4 py-2 border rounded-lg bg-gray-100 dark:bg-gray-600 dark:border-gray-500 dark:text-white">
+                    </div>
+                </div>
+            </div>
+            
+            <!-- بيانات الحساب -->
+            <div class="bg-indigo-50 dark:bg-gray-700 p-4 rounded-lg">
+                <h4 class="font-bold text-lg mb-4 text-indigo-700 dark:text-indigo-300">
+                    <i class="fas fa-key ml-2"></i>بيانات الحساب
+                </h4>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium mb-2 dark:text-gray-300">البريد الإلكتروني للحساب</label>
+                        <input type="email" name="account_email"
+                               class="w-full px-4 py-2 border rounded-lg dark:bg-gray-600 dark:border-gray-500 dark:text-white">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-2 dark:text-gray-300">كلمة المرور</label>
+                        <input type="text" name="account_password"
+                               class="w-full px-4 py-2 border rounded-lg dark:bg-gray-600 dark:border-gray-500 dark:text-white">
+                    </div>
+                </div>
+            </div>
+            
+            <!-- أزرار الإجراءات -->
+            <div class="flex gap-3 pt-4 border-t dark:border-gray-700">
+                <button type="submit" class="flex-1 bg-green-500 hover:bg-green-600 text-white px-6 py-3 rounded-lg transition font-bold">
+                    <i class="fas fa-save ml-2"></i>حفظ الأوردر
+                </button>
+                <button type="button" onclick="closeEnhancedOrderModal()" class="px-6 py-3 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition">
+                    إلغاء
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- ============================================ -->
+<!-- تاب إحصائيات الشيفتات والمنتجات -->
+<!-- ============================================ -->
+<div id="shiftProductStatsTab" class="tab-content hidden">
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
+        <!-- Header -->
+        <div class="flex justify-between items-center mb-6">
+            <div>
+                <h2 class="text-2xl font-bold dark:text-white">📊 إحصائيات الشيفتات والمنتجات</h2>
+                <p class="text-gray-600 dark:text-gray-400 mt-1">تحليل تفصيلي لكل شيفت ومنتج</p>
+            </div>
+            <div class="flex gap-3">
+                <input type="date" id="shiftStatsDate" class="px-4 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+                <button onclick="loadShiftProductStats()" class="bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded-lg transition">
+                    <i class="fas fa-sync ml-2"></i>تحديث
+                </button>
+                <button onclick="exportShiftProductStats()" class="bg-green-500 hover:bg-green-600 text-white px-6 py-2 rounded-lg transition">
+                    <i class="fas fa-file-excel ml-2"></i>تصدير
+                </button>
+            </div>
+        </div>
+        
+        <!-- Shift Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <!-- Evening Shift -->
+            <div class="bg-gradient-to-br from-blue-500 to-cyan-500 rounded-lg p-6 text-white">
+                <div class="flex items-center justify-between mb-4">
+                    <div>
+                        <h3 class="text-lg font-bold">شيفت العصر</h3>
+                        <p class="text-sm opacity-90">4م - 12م</p>
+                    </div>
+                    <i class="fas fa-cloud-sun text-4xl opacity-80"></i>
+                </div>
+                <div class="space-y-2">
+                    <div class="flex justify-between">
+                        <span>عدد الأوردرات:</span>
+                        <span class="font-bold" id="eveningOrderCount">0</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span>إجمالي المبيعات:</span>
+                        <span class="font-bold" id="eveningTotalSales">0 ج</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Night Shift -->
+            <div class="bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg p-6 text-white">
+                <div class="flex items-center justify-between mb-4">
+                    <div>
+                        <h3 class="text-lg font-bold">شيفت الليل</h3>
+                        <p class="text-sm opacity-90">12م - 8ص</p>
+                    </div>
+                    <i class="fas fa-moon text-4xl opacity-80"></i>
+                </div>
+                <div class="space-y-2">
+                    <div class="flex justify-between">
+                        <span>عدد الأوردرات:</span>
+                        <span class="font-bold" id="nightOrderCount">0</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span>إجمالي المبيعات:</span>
+                        <span class="font-bold" id="nightTotalSales">0 ج</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Morning Shift -->
+            <div class="bg-gradient-to-br from-yellow-500 to-orange-500 rounded-lg p-6 text-white">
+                <div class="flex items-center justify-between mb-4">
+                    <div>
+                        <h3 class="text-lg font-bold">شيفت الصبح</h3>
+                        <p class="text-sm opacity-90">8ص - 4م</p>
+                    </div>
+                    <i class="fas fa-sun text-4xl opacity-80"></i>
+                </div>
+                <div class="space-y-2">
+                    <div class="flex justify-between">
+                        <span>عدد الأوردرات:</span>
+                        <span class="font-bold" id="morningOrderCount">0</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span>إجمالي المبيعات:</span>
+                        <span class="font-bold" id="morningTotalSales">0 ج</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Products per Shift Table -->
+        <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-6">
+            <h3 class="text-xl font-bold mb-4 dark:text-white">تفصيل المنتجات لكل شيفت</h3>
+            <div class="overflow-x-auto">
+                <table class="w-full" id="shiftProductTable">
+                    <thead>
+                        <tr class="bg-gray-200 dark:bg-gray-600">
+                            <th class="px-4 py-3 text-right dark:text-white">المنتج</th>
+                            <th class="px-4 py-3 text-center dark:text-white">شيفت العصر</th>
+                            <th class="px-4 py-3 text-center dark:text-white">شيفت الليل</th>
+                            <th class="px-4 py-3 text-center dark:text-white">شيفت الصبح</th>
+                            <th class="px-4 py-3 text-center dark:text-white">الإجمالي</th>
+                        </tr>
+                    </thead>
+                    <tbody id="shiftProductTableBody" class="divide-y dark:divide-gray-600">
+                        <!-- سيتم ملؤها ديناميكياً -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ============================================ -->
+<!-- نظام التنبيهات المحسّن -->
+<!-- ============================================ -->
+<div id="notificationsPanel" class="fixed left-4 top-20 w-96 max-h-[80vh] bg-white dark:bg-gray-800 rounded-lg shadow-2xl overflow-hidden hidden z-40">
+    <!-- Header -->
+    <div class="bg-gradient-to-r from-red-500 to-pink-500 p-4 text-white">
+        <div class="flex justify-between items-center">
+            <div>
+                <h3 class="font-bold text-lg">🔔 التنبيهات</h3>
+                <p class="text-sm opacity-90">لديك <span id="unreadNotifCount">0</span> تنبيه غير مقروء</p>
+            </div>
+            <button onclick="closeNotificationsPanel()" class="hover:bg-white hover:bg-opacity-20 rounded-full p-2 transition">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+    </div>
+    
+    <!-- Filters -->
+    <div class="p-3 border-b dark:border-gray-700 flex gap-2">
+        <button onclick="filterNotifications('all')" class="flex-1 px-3 py-2 text-sm rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition">
+            الكل
+        </button>
+        <button onclick="filterNotifications('unread')" class="flex-1 px-3 py-2 text-sm rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition">
+            غير مقروء
+        </button>
+        <button onclick="markAllAsRead()" class="px-3 py-2 text-sm rounded-lg bg-blue-500 text-white hover:bg-blue-600 transition">
+            <i class="fas fa-check-double"></i>
+        </button>
+    </div>
+    
+    <!-- Notifications List -->
+    <div id="notificationsList" class="overflow-y-auto max-h-[60vh] divide-y dark:divide-gray-700">
+        <!-- سيتم ملؤها ديناميكياً -->
+    </div>
+</div>
+
+<style>
+/* تحسينات CSS للمكونات الجديدة */
+.modal {
+    backdrop-filter: blur(4px);
+}
+
+.excel-table {
+    border-collapse: separate;
+    border-spacing: 0;
+}
+
+.excel-table th {
+    position: sticky;
+    top: 0;
+    background: #f3f4f6;
+    z-index: 10;
+}
+
+.excel-table tbody tr:hover {
+    background: #f9fafb;
+    transform: scale(1.01);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    transition: all 0.2s;
+}
+
+.notification-item {
+    transition: all 0.3s;
+}
+
+.notification-item:hover {
+    background: #f3f4f6;
+}
+
+.notification-item.unread {
+    border-right: 4px solid #3b82f6;
+    background: #eff6ff;
+}
+
+/* Dark mode adjustments */
+.dark .excel-table th {
+    background: #374151;
+}
+
+.dark .excel-table tbody tr:hover {
+    background: #1f2937;
+}
+
+.dark .notification-item:hover {
+    background: #374151;
+}
+
+.dark .notification-item.unread {
+    background: #1e3a5f;
+}
+</style>
